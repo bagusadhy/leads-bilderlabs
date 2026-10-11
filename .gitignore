@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+# Data lead asli (email & nama kontak). Cukup ada di laptop untuk seed pertama, jangan masuk repo.
+data/seed.json
+.dev.vars
+backup-*.sql
+*.log
+.DS_Store

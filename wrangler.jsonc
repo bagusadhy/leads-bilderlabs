@@ -1,0 +1,41 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "bilderlabs-dashboard",
+	"main": "src/worker.js",
+	"compatibility_date": "2026-09-01",
+	// Only reachable on the custom domain below (no *.workers.dev URL).
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [
+		{
+			"pattern": "leads.bilderlabs.com",
+			"custom_domain": true
+		}
+	],
+	// Static dashboard files. Every request goes through the Worker first so it can add security headers.
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"run_worker_first": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "bilder-leads",
+			"database_id": "4b772e3a-d204-4270-a38e-6929672cc9c5",
+			"migrations_dir": "migrations"
+		}
+	],
+	"vars": {
+		"SESSION_DAYS": "30"
+	},
+	// Daily clean-up of expired logins.
+	"triggers": {
+		"crons": [
+			"17 20 * * *"
+		]
+	},
+	"observability": {
+		"enabled": true
+	}
+}

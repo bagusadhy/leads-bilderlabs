@@ -1,0 +1,26 @@
+name: bilderlabs-dashboard
+
+services:
+  app:
+    build: .
+    image: bilderlabs-dashboard:latest
+    container_name: bilderlabs-dashboard
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3000
+    ports:
+      # Default only listens on the VPS itself (use a reverse proxy, Tailscale or an SSH tunnel).
+      # Set APP_BIND=0.0.0.0 in .env to open it on the network.
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    extra_hosts:
+      # Lets DB_HOST=host.docker.internal reach a MySQL port published on the host.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - mysql
+
+networks:
+  # The Docker network your existing MySQL container is on (see README, step 2).
+  mysql:
+    external: true
+    name: ${DB_NETWORK:-mysql_default}

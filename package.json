@@ -1,0 +1,25 @@
+{
+  "name": "bilderlabs-dashboard",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Outreach CRM for Bilder Labs on Cloudflare Workers + D1: leads, follow-up schedule, email sequences and results.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply bilder-leads --remote",
+    "db:migrate:local": "wrangler d1 migrations apply bilder-leads --local",
+    "db:seed": "node scripts/seed-sql.mjs && wrangler d1 execute bilder-leads --remote --file=.wrangler/seed.sql",
+    "db:seed:local": "node scripts/seed-sql.mjs && wrangler d1 execute bilder-leads --local --file=.wrangler/seed.sql",
+    "user:add": "node scripts/user.mjs add",
+    "user:password": "node scripts/user.mjs password",
+    "user:list": "wrangler d1 execute bilder-leads --remote --command \"SELECT id, username, name, created_at FROM users\"",
+    "backup": "wrangler d1 export bilder-leads --remote --output=backup-bilder-leads.sql"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "wrangler": "^4.149.0"
+  }
+}
