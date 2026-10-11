@@ -120,17 +120,20 @@ const first=l=>(l.contact||'').trim().split(/\s+/)[0]||'there';
 function fill(t,l){const seq0=(l.seq&&l.seq[0])||{};return String(t||'').replace(/\{\{(\w+)\}\}/g,(m,k)=>{const v={first_name:first(l),business:l.business,city:String(l.city||'').replace(/\s+[A-Z]{2,3}$/,''),niche:String(l.niche||'').toLowerCase(),reviews:l.reviews||'',rating:l.rating||'',hook:l.hook||'',sender:(ME&&ME.name)||S.sender||'Bagus',subject1:seq0.subject||fill((S.tpl.seq[0]||{}).subject||'',Object.assign({},l,{seq:[{subject:'A homepage idea'}]})),mockup_date:pd(addBiz(today(),S.mockupDays)).toLocaleDateString(l.country==='AU'?'en-AU':'en-US',{weekday:'long',month:'long',day:'numeric'})}[k];return v==null?m:String(v)})}
 const postal=t=>S.postal?String(t).split(POSTAL_PH).join(S.postal):String(t);
 /* When Zoho adds the HTML signature (logo, name, address, opt-out line), drop the typed sign-off so it is not shown twice. */
-const senderNames=()=>[S.sender,ME&&ME.name,'Bagus'].filter(Boolean).map(x=>String(x).trim().toLowerCase());
+const senderNames=()=>[S.sender,ME&&ME.name,'Bagus','{{sender}}'].filter(Boolean).map(x=>String(x).trim().toLowerCase());
 function stripSig(t){const lines=String(t).split('\n'),names=senderNames();let i=-1;
   for(let k=lines.length-1;k>=0;k--){if(names.includes(lines[k].trim().toLowerCase())){i=k;break}}
   if(i<0)return String(t);
   const sigLine=x=>{const v=x.trim();return !v||names.includes(v.toLowerCase())||/^bilder labs\s*\|\s*bilderlabs\.com$/i.test(v)||v===POSTAL_PH||(S.postal&&v===S.postal)||/reply\s+["\u201c]?no["\u201d]?\s+and\s+i\s+won/i.test(v)};
   const keep=lines.slice(i).filter(x=>!sigLine(x));
   return (lines.slice(0,i).join('\n').replace(/\s+$/,'')+(keep.length?'\n\n'+keep.join('\n'):''))}
-/* In text mode, sign with the name of whoever is logged in (seed emails were written as Bagus). */
-function swapName(t){if(!ME||!ME.name)return String(t);const lines=String(t).split('\n'),names=senderNames();for(let k=lines.length-1;k>=0;k--){if(names.includes(lines[k].trim().toLowerCase())){lines[k]=ME.name;break}}return lines.join('\n')}
-const finish=t=>S.zohoSig?stripSig(t):postal(swapName(t));
-function seqFor(l){if(l.seq&&l.seq.length)return l.seq.map(s=>({subject:s.subject,body:finish(s.body)}));return (S.tpl.seq||[]).map(s=>({subject:fill(s.subject,l),body:finish(fill(s.body,l)),generated:true}))}
+/* Templates hold the message only. The sign-off is added here: by Zoho's HTML signature, or as text by the dashboard. */
+const OPT_OUT='Not useful right now? Just reply "no" and I won\'t follow up.';
+function finish(t,kind){const body=stripSig(t);if(S.zohoSig)return body;
+  const name=(ME&&ME.name)||S.sender||'Bagus';
+  return body+'\n\n'+name+'\nBilder Labs | bilderlabs.com\n'+(S.postal||POSTAL_PH)+(kind==='reply'?'':'\n\n'+OPT_OUT)}
+function cleanTemplates(){let changed=false;['seq','replies'].forEach(g=>(S.tpl[g]||[]).forEach(t=>{const b=stripSig(t.body);if(b!==t.body){t.body=b;changed=true}}));return changed}
+function seqFor(l){if(l.seq&&l.seq.length)return l.seq.map(s=>({subject:s.subject,body:finish(s.body,'seq')}));return (S.tpl.seq||[]).map(s=>({subject:fill(s.subject,l),body:finish(fill(s.body,l),'seq'),generated:true}))}
 
 /* ---------- server sync ---------- */
 const UI={view:'today',country:'ALL',q:'',ltab:'todo',niche:'',sort:'next',open:null,dtab:'sum',out:null,queue:null,inboxQ:'',lview:'list',navOpen:false};
@@ -171,7 +174,7 @@ const isTyping=()=>{const a=document.activeElement;return !!(a&&/input|textarea|
 async function poll(){if(document.hidden||flushing||hasPending()||!ME)return;
   try{const r=await api('GET','/api/changes?since='+encodeURIComponent(CURSOR));CURSOR=r.cursor||CURSOR;let n=0;
     (r.leads||[]).forEach(nl=>{const old=byId(nl.id);if(old&&old.version>=nl.version)return;replaceLead(normLead(nl));n++});
-    if(r.settings&&!setPending){setSettings(r.settings);n++}
+    if(r.settings&&!setPending){setSettings(r.settings);cleanTemplates();n++}
     if(r.meta&&!metaPending&&JSON.stringify(r.meta)!==JSON.stringify(DATA.meta)){DATA.meta=r.meta;n++}
     if(!online){online=true;if(SAVE==='err'&&!hasPending())SAVE='ok'}
     if(n){if(isTyping()||UI.queue)needRender=true;else render()}else renderSave()}
@@ -445,7 +448,7 @@ const TPL_VARS=['first_name','business','city','niche','reviews','rating','hook'
 function vSettings(){const sq=S.tpl.seq||[],rp=S.tpl.replies||[];const sel=UI.tplSel||'seq:0';const cur=tplGet(sel)||{subject:'',body:''};
   return '<div class="two"><div class="card pad form"><h3 class="h3">Template email</h3><p class="sub">Email 1, follow-up, dan last note di sini dipakai untuk lead yang belum punya email personal (misalnya hasil import). Template balasan muncul di tab Balasan setiap lead.</p>'
    +'<div class="fld"><label for="tpl-sel">Template</label><select id="tpl-sel">'+sq.map((t,i)=>'<option value="seq:'+i+'"'+(sel==='seq:'+i?' selected':'')+'>Sequence · '+STEP[i]+'</option>').join('')+rp.map((t,i)=>'<option value="rep:'+i+'"'+(sel==='rep:'+i?' selected':'')+'>Balasan · '+esc(t.name)+'</option>').join('')+'</select></div>'
-   +'<div class="fld"><label for="tpl-subj">Subjek</label><input id="tpl-subj" value="'+esc(cur.subject)+'"></div><div class="fld"><label for="tpl-body">Isi</label><textarea id="tpl-body" style="min-height:320px" spellcheck="false">'+esc(cur.body)+'</textarea><small>Variabel: '+TPL_VARS.map(v=>'<code>{{'+v+'}}</code>').join(' ')+'</small></div><p class="flag" id="tpl-flag"></p></div>'
+   +'<div class="fld"><label for="tpl-subj">Subjek</label><input id="tpl-subj" value="'+esc(cur.subject)+'"></div><div class="fld"><label for="tpl-body">Isi</label><textarea id="tpl-body" style="min-height:320px" spellcheck="false">'+esc(cur.body)+'</textarea><small>Variabel: '+TPL_VARS.map(v=>'<code>{{'+v+'}}</code>').join(' ')+'</small><small>Tulis sampai kalimat penutup saja. Signature ditambahkan otomatis '+(S.zohoSig?'oleh Zoho (logo, nama, alamat, kalimat &quot;reply no&quot;)':'oleh dashboard (nama, Bilder Labs, alamat pos, dan kalimat &quot;reply no&quot; untuk email outreach)')+'.</small></div><p class="flag" id="tpl-flag"></p></div>'
    +'<div class="form"><div class="card pad form"><h3 class="h3">Aturan jadwal</h3><div class="f2">'
    +num('limit','Batas kirim per hari',S.limit,'email')+num('fu','Follow-up setelah',S.fu,'hari dari Email 1')+num('ln','Last note di hari ke-',S.ln,'dari Email 1')+num('close','Tutup sequence setelah',S.close,'hari dari last note')+num('replySla','Balas lead dalam',S.replySla,'hari')+num('mockupDays','Mock-up dikirim dalam',S.mockupDays,'hari kerja')+num('nudge','Tanya pendapat mock-up setelah',S.nudge,'hari')+num('wakeDays','"Nanti saja" ditunda',S.wakeDays,'hari')+num('winStart','Jam kirim terbaik mulai',S.winStart,'waktu mereka')+num('winEnd','Sampai jam',S.winEnd,'waktu mereka')
    +'</div></div><div class="card pad form"><h3 class="h3">Tanda tangan</h3><div class="fld"><label for="set-zohoSig">Signature di email</label><select id="set-zohoSig"><option value="1"'+(S.zohoSig?' selected':'')+'>Signature HTML dari Zoho</option><option value="0"'+(S.zohoSig?'':' selected')+'>Teks dari dashboard</option></select><small>'+(S.zohoSig?'Email yang disalin berhenti sebelum nama. Signature Zoho (logo, nama, alamat pos, kalimat &quot;reply no&quot;) yang menutup setiap email.':'Nama, Bilder Labs, dan alamat pos ditulis sebagai teks di akhir email.')+'</small></div><div class="fld"><label for="set-sender">Nama pengirim</label><input id="set-sender" data-set="sender" value="'+esc(S.sender)+'"></div><div class="fld"><label for="set-postal">Alamat pos bisnis</label><input id="set-postal" data-set="postal" value="'+esc(S.postal)+'" placeholder="Wajib untuk email ke US (CAN-SPAM)"><small>Menggantikan '+esc(POSTAL_PH)+' di semua email saat disalin.</small></div></div>'
@@ -538,7 +541,7 @@ function dSeq(l){const seq=seqFor(l),s=l.sent||{},a=na(l);let h=seq[0]&&seq[0].g
      +'<div class="mail-f"><button class="btn s l" data-copyi="'+cp(m.body)+'">Salin email</button>'+(l.email?'<button class="btn s" data-copyi="'+cp(l.email)+'">Salin alamat</button>':'')
      +(sent?'<label class="sub" for="sd-'+k+'" style="margin-left:auto">Tanggal kirim</label><input type="date" id="sd-'+k+'" data-sentdate="'+k+'" value="'+sent+'" max="'+today()+'">'
        :(isNext&&l.email?'<span style="margin-left:auto;display:flex;gap:6px;align-items:center"><input type="date" id="sd-new-'+k+'" value="'+today()+'" max="'+today()+'" aria-label="Tanggal kirim"><button class="btn s p" data-act="mark-sent" data-step="'+i+'">Tandai terkirim</button></span>':''))+'</div></div>'}).join('')}
-function dReply(l){const rp=S.tpl.replies||[];return '<p class="sub" style="margin-bottom:12px">Template untuk tahap setelah mereka membalas. Kirim sebagai balasan di thread yang sama. Ubah templatenya di Template & aturan.</p>'+rp.map(t=>{const subj=fill(t.subject,l),body=finish(fill(t.body,l));return '<div class="mail"><div class="mail-h"><b>'+esc(t.name)+'</b><span class="sub">'+esc(t.when||'')+'</span></div><div class="mail-s"><span>'+esc(subj)+'</span><button class="btn s" data-copyi="'+cp(subj)+'">Salin subjek</button></div><div class="mail-b">'+esc(body)+'</div><div class="mail-f"><button class="btn s l" data-copyi="'+cp(body)+'">Salin email</button></div></div>'}).join('')}
+function dReply(l){const rp=S.tpl.replies||[];return '<p class="sub" style="margin-bottom:12px">Template untuk tahap setelah mereka membalas. Kirim sebagai balasan di thread yang sama. Ubah templatenya di Template & aturan.</p>'+rp.map(t=>{const subj=fill(t.subject,l),body=finish(fill(t.body,l),'reply');return '<div class="mail"><div class="mail-h"><b>'+esc(t.name)+'</b><span class="sub">'+esc(t.when||'')+'</span></div><div class="mail-s"><span>'+esc(subj)+'</span><button class="btn s" data-copyi="'+cp(subj)+'">Salin subjek</button></div><div class="mail-b">'+esc(body)+'</div><div class="mail-f"><button class="btn s l" data-copyi="'+cp(body)+'">Salin email</button></div></div>'}).join('')}
 function dLog(l){return '<label class="sub" for="note-in">Catatan baru</label><textarea class="notein" id="note-in" placeholder="Misalnya: owner minta dihubungi setelah jam 4 sore"></textarea><div class="bar-actions" style="margin-top:8px"><button class="btn s p" data-act="add-note">Tambah catatan</button></div><div class="log">'+(l.log||[]).slice().reverse().map(e=>'<div class="ev"><i class="'+esc(e.k||'')+'"></i><div>'+esc(e.t)+'<small>'+esc(e.d)+(e.by?' · '+esc(e.by):'')+'</small></div></div>').join('')+'</div>'}
 /* ---------- send mode ---------- */
 function buildQueue(kind){const D=todayData();let items=[];
@@ -644,7 +647,7 @@ function onKey(e){if(e.key==='/'&&!/input|textarea|select/i.test(e.target.tagNam
 
 /* ---------- boot ---------- */
 async function start(){restoreUI();mount();$('#view').innerHTML='<div class="loading">'+ic('loader')+'Memuat data…</div>';$('#theme-btn').innerHTML=ic(curTheme()==='dark'?'sun':'moon');renderSave();
-  try{const d=await api('GET','/api/bootstrap');ME=d.user;CURSOR=d.cursor||'';setData(d);render()}
+  try{const d=await api('GET','/api/bootstrap');ME=d.user;CURSOR=d.cursor||'';setData(d);if(cleanTemplates())saveSettings();render()}
   catch(e){$('#view').innerHTML='<div class="card empty"><b>Tidak bisa memuat data</b>'+esc(e.message)+'<div class="bar-actions" style="justify-content:center;margin-top:12px"><button class="btn" data-act="reload">Coba lagi</button></div></div>';return}
   setInterval(poll,20000);
   setInterval(()=>{if(UI.view==='today'&&UI.open==null&&!UI.queue&&!isTyping())render()},60000)}

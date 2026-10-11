@@ -16,15 +16,15 @@
   "seq": [
    {
     "subject": "A homepage idea for {{business}}",
-    "body": "Hi {{first_name}},\n\n{{hook}}\n\nWhy it matters: most people look a business up online before they call. When someone searches for a {{niche}} in {{city}}, the businesses with a website usually win that call, because the site has already answered their questions. A simple website lets you:\n- show every service you provide and the areas you cover\n- take quote requests, even after hours\n- put your reviews and photos in one place\n- show up in more Google searches, not only on Maps\n\nI run Bilder Labs, a small web design studio. I'd like to design a homepage mock-up for {{business}}. It's yours to keep, whether we end up working together or not.\n\nAll it takes is a short reply to three questions:\n1. What should a visitor do first: call you, request a quote, or book?\n2. Which two or three services or strengths should stand out?\n3. Any colours, logo or website you like the look of? (Fine to skip.)\n\nI'll send the design back within 3 business days as an image you can open on your phone.\n\n{{sender}}\nBilder Labs | bilderlabs.com\n[Your business postal address]\n\nNot useful right now? Just reply \"no\" and I won't follow up."
+    "body": "Hi {{first_name}},\n\n{{hook}}\n\nWhy it matters: most people look a business up online before they call. When someone searches for a {{niche}} in {{city}}, the businesses with a website usually win that call, because the site has already answered their questions. A simple website lets you:\n- show every service you provide and the areas you cover\n- take quote requests, even after hours\n- put your reviews and photos in one place\n- show up in more Google searches, not only on Maps\n\nI run Bilder Labs, a small web design studio. I'd like to design a homepage mock-up for {{business}}. It's yours to keep, whether we end up working together or not.\n\nAll it takes is a short reply to three questions:\n1. What should a visitor do first: call you, request a quote, or book?\n2. Which two or three services or strengths should stand out?\n3. Any colours, logo or website you like the look of? (Fine to skip.)\n\nI'll send the design back within 3 business days as an image you can open on your phone."
    },
    {
     "subject": "Re: A homepage idea for {{business}}",
-    "body": "Hi {{first_name}},\n\nBringing this back to the top of your inbox. If you send me a line or two about what {{business}} wants people to notice first, I'll put the homepage mock-up together this week. It's yours to keep either way.\n\n{{sender}}\nBilder Labs | bilderlabs.com\n[Your business postal address]\n\nReply \"no\" and I won't follow up."
+    "body": "Hi {{first_name}},\n\nBringing this back to the top of your inbox. If you send me a line or two about what {{business}} wants people to notice first, I'll put the homepage mock-up together this week. It's yours to keep either way."
    },
    {
     "subject": "Re: A homepage idea for {{business}}",
-    "body": "Hi {{first_name}},\n\nI'll leave it here so I'm not crowding your inbox. If you'd like the homepage mock-up later, reply with your three answers any time and I'll get it done.\n\nAll the best with {{business}},\n{{sender}}\nBilder Labs | bilderlabs.com\n[Your business postal address]"
+    "body": "Hi {{first_name}},\n\nI'll leave it here so I'm not crowding your inbox. If you'd like the homepage mock-up later, reply with your three answers any time and I'll get it done.\n\nAll the best with {{business}},"
    }
   ],
   "replies": [
@@ -32,43 +32,43 @@
     "name": "Minta brief",
     "when": "Setelah mereka membalas tertarik",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nThanks for getting back to me. To put the homepage mock-up together for {{business}}, I only need short answers to three questions:\n\n1. What should a visitor do first: call you, request a quote, or book?\n2. Which two or three services or strengths should stand out?\n3. Any colours, logo or website you like the look of? (Fine to skip.)\n\nOnce I have these, you'll get the design within 3 business days.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nThanks for getting back to me. To put the homepage mock-up together for {{business}}, I only need short answers to three questions:\n\n1. What should a visitor do first: call you, request a quote, or book?\n2. Which two or three services or strengths should stand out?\n3. Any colours, logo or website you like the look of? (Fine to skip.)\n\nOnce I have these, you'll get the design within 3 business days."
    },
    {
     "name": "Konfirmasi brief diterima",
     "when": "Saat brief masuk",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nThanks, that's everything I need. I'll send the homepage mock-up for {{business}} by {{mockup_date}}.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nThanks, that's everything I need. I'll send the homepage mock-up for {{business}} by {{mockup_date}}."
    },
    {
     "name": "Kirim mock-up",
     "when": "Saat mock-up selesai",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nHere's the homepage mock-up for {{business}}: [link or attachment]\n\nA few notes on the choices:\n- [why the page puts calls or quote requests first]\n- [which services and reviews are highlighted]\n- [one detail taken from your brief]\n\nIt's yours to keep. If you'd like it built as a real website you can update yourself, the founding-client price is 750 USD one-time, including basic search setup and 30 days of support. Happy to adjust the design first.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nHere's the homepage mock-up for {{business}}: [link or attachment]\n\nA few notes on the choices:\n- [why the page puts calls or quote requests first]\n- [which services and reviews are highlighted]\n- [one detail taken from your brief]\n\nIt's yours to keep. If you'd like it built as a real website you can update yourself, the founding-client price is 750 USD one-time, including basic search setup and 30 days of support. Happy to adjust the design first."
    },
    {
     "name": "Tanya pendapat mock-up",
     "when": "3 hari setelah mock-up dikirim",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nDid you get a chance to look at the mock-up? I'm happy to change colours, photos or wording, or to answer any questions about building it.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nDid you get a chance to look at the mock-up? I'm happy to change colours, photos or wording, or to answer any questions about building it."
    },
    {
     "name": "Balasan \"nanti saja\"",
     "when": "Saat mereka bilang belum waktunya",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nNo problem at all, thanks for letting me know. I'll check back in a couple of months. If anything changes before then, just reply to this email.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nNo problem at all, thanks for letting me know. I'll check back in a couple of months. If anything changes before then, just reply to this email."
    },
    {
     "name": "Check-in setelah ditunda",
     "when": "Saat lead yang ditunda jatuh tempo",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nYou mentioned a while back that the timing wasn't right for a website. Checking in to see if that has changed. The homepage mock-up for {{business}} is still on the table whenever you'd like it, at no cost.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nYou mentioned a while back that the timing wasn't right for a website. Checking in to see if that has changed. The homepage mock-up for {{business}} is still on the table whenever you'd like it, at no cost."
    },
    {
     "name": "Penutup \"tidak tertarik\"",
     "when": "Saat mereka menolak",
     "subject": "Re: {{subject1}}",
-    "body": "Hi {{first_name}},\n\nUnderstood, thanks for the reply. I won't email again. All the best with {{business}}.\n\n{{sender}}\nBilder Labs | bilderlabs.com"
+    "body": "Hi {{first_name}},\n\nUnderstood, thanks for the reply. I won't email again. All the best with {{business}}."
    }
   ]
  }
