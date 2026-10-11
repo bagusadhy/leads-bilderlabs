@@ -5,11 +5,12 @@ const $=(s,r)=>(r||document).querySelector(s), $$=(s,r)=>[...(r||document).query
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const DATA={v:1,leads:[],settings:{},meta:{}};
 const LEADS=DATA.leads;
-const DEF={limit:15,fu:4,ln:10,close:5,replySla:1,mockupDays:3,nudge:3,wakeDays:45,winStart:8,winEnd:11,sender:'Bagus',postal:'',dnc:'',zohoSig:true,tpl:{seq:[],replies:[]}};
+const DEF={territory:{bagus:['AU'],andre:['US']},limit:15,fu:4,ln:10,close:5,replySla:1,mockupDays:3,nudge:3,wakeDays:45,winStart:8,winEnd:11,sender:'Bagus',postal:'',dnc:'',zohoSig:true,tpl:{seq:[],replies:[]}};
 const S=DATA.settings;Object.assign(S,DEF);
 const POSTAL_PH='[Your business postal address]';
 /* Icons: paths based on Lucide (ISC License, lucide.dev) */
 const IC={
+ user:'<circle cx="12" cy="7" r="4"/><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>',
  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
  calendar:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -111,7 +112,7 @@ function dots(l){const s=l.sent||{},a=na(l);const late=['replied','brief','mocku
   return '<span class="dots" title="Email 1 · Follow-up · Last note">'+[0,1,2].map(i=>{const k='e'+(i+1);let c='';
     if(s[k])c='done';else if(a&&a.k==='send'&&a.step===i)c=a.due?(dueCls(a.due)==='over'?'over':dueCls(a.due)==='today'?'due':'next'):'next';else if(late)c='skip';
     return '<i class="'+c+'"></i>'}).join('')+'</span>'}
-const sentCount=d=>{let n=0;for(const l of LEADS){const s=l.sent||{};for(const k in s)if(s[k]===d)n++;if(l.at&&l.at.nudged===d)n++}return n};
+const sentCount=(d,L)=>{let n=0;for(const l of (L||LEADS)){const s=l.sent||{};for(const k in s)if(s[k]===d)n++;if(l.at&&l.at.nudged===d)n++}return n};
 
 /* ---------- email content ---------- */
 const SPAM=['free','offer','guarantee','risk-free','no obligation','limited time','act now','click here','urgent','winner','cash','cheap','discount','deal','100%','% off','earn','income','special promotion','buy now','order now','congratulations','credit','investment','lowest price','bonus','increase sales','marketing','seo','dear friend','opportunity','$','!'];
@@ -139,8 +140,8 @@ function seqFor(l){if(l.seq&&l.seq.length)return l.seq.map(s=>({subject:s.subjec
 const UI={view:'today',country:'ALL',q:'',ltab:'todo',niche:'',sort:'next',open:null,dtab:'sum',out:null,queue:null,inboxQ:'',lview:'list',navOpen:false};
 let ME=null,CURSOR='',SAVE='ok',lastSaved='',errMsg='',online=true,needRender=false;
 const PEND=new Map();let leadTimer=null,setTimer=null,metaTimer=null,retryTimer=null,flushing=false,setPending=false,metaPending=false;
-function rememberUI(){try{localStorage.setItem('bl-ui',JSON.stringify({view:UI.view,country:UI.country,ltab:UI.ltab,lview:UI.lview,sort:UI.sort}))}catch(e){}}
-function restoreUI(){try{const s=JSON.parse(localStorage.getItem('bl-ui')||'{}');['view','country','ltab','lview','sort'].forEach(k=>{if(typeof s[k]==='string')UI[k]=s[k]})}catch(e){}}
+function rememberUI(){try{localStorage.setItem('bl-ui',JSON.stringify({view:UI.view,country:UI.country,ltab:UI.ltab,lview:UI.lview,sort:UI.sort,me:UI.me}))}catch(e){}}
+function restoreUI(){try{const s=JSON.parse(localStorage.getItem('bl-ui')||'{}');['view','country','ltab','lview','sort'].forEach(k=>{if(typeof s[k]==='string')UI[k]=s[k]});if(typeof s.me==='boolean')UI.me=s.me}catch(e){}}
 async function api(method,url,body){let r;
   try{r=await fetch(url,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'bilder'},body:body===undefined?undefined:JSON.stringify(body)})}
   catch(e){const err=new Error('Tidak bisa terhubung ke server');err.offline=true;throw err}
@@ -166,7 +167,7 @@ async function flushAll(){if(flushing)return;flushing=true;clearTimeout(retryTim
         else if(e.status===400||e.status===404||e.status===413){toast('Perubahan '+(l.business||'lead')+' ditolak: '+e.message)}
         else{const cur=PEND.get(id);PEND.set(id,{events:p.events.concat(cur?cur.events:[])});throw e}}}
     if(setPending){setPending=false;try{await api('PUT','/api/settings',{settings:S})}catch(e){setPending=true;throw e}}
-    if(metaPending){metaPending=false;try{await api('PUT','/api/meta',{meta:DATA.meta})}catch(e){metaPending=true;throw e}}
+    if(metaPending){metaPending=false;try{await api('PUT','/api/meta',{inboxChecked:(DATA.meta.inbox||{})[ME.username]||''})}catch(e){metaPending=true;throw e}}
     SAVE='ok';online=true;errMsg='';lastSaved=myTime(new Date())}
   catch(e){SAVE='err';online=!e.offline;errMsg=e.message;retryTimer=setTimeout(flushAll,8000)}
   finally{flushing=false;renderSave();if(SAVE!=='err'&&hasPending())flushAll()}}
@@ -252,13 +253,27 @@ const SHELL='<aside class="side" id="side">'
  +'<button class="side-scrim" data-act="menu" aria-label="Tutup menu"></button>'
  +'<main class="main"><header class="topbar"><button class="icon-btn only-m" data-act="menu" aria-label="Buka menu">'+ic('menu')+'</button>'
  +'<div class="crumb"><span>Bilder Labs</span>'+ic('chev')+'<b id="crumb"></b></div>'
- +'<div class="top-r"><div class="seg" id="country"><button data-country="ALL">Semua</button><button data-country="AU">Australia</button><button data-country="US">US</button></div>'
+ +'<div class="top-r"><div class="seg" id="mode" role="group" aria-label="Tampilan"><button data-mode="team" title="Semua lead tim">'+ic('users')+'<span class="d">Tim</span></button><button data-mode="me" title="Hanya lead yang kamu tangani">'+ic('user')+'<span class="d">Saya</span></button></div><div class="seg" id="country"><button data-country="ALL">Semua</button><button data-country="AU"><span class="d">Australia</span><span class="m">AU</span></button><button data-country="US">US</button></div>'
  +'<button class="icon-btn" data-act="theme" id="theme-btn" aria-label="Ganti tema terang atau gelap"></button>'
  +'<a class="btn s hide-m" href="https://mail.zoho.com/zm/" target="_blank" rel="noopener">'+ic('mail')+'Zoho Mail</a></div></header>'
  +'<div class="page"><div class="page-h"><div><h1 id="title"></h1><p id="subtitle"></p></div><div class="page-a" id="page-actions"></div></div><section id="view"></section></div></main>'
  +'<div class="scrim" id="scrim" hidden></div><aside class="drawer" id="drawer" role="dialog" aria-label="Detail lead" hidden></aside><div class="sendmode" id="sendmode" role="dialog" aria-label="Mode kirim" hidden></div><div class="toast" id="toast" role="status" hidden></div>';
 const TITLES={today:['Hari ini',''],leads:['Leads','Semua lead dikelompokkan per status. Klik untuk detail.'],schedule:['Jadwal','Apa yang jatuh tempo 14 hari ke depan, supaya tidak ada yang terlewat.'],pipeline:['Pipeline','Seret kartu ke kolom lain untuk mengubah status. Klik kartu untuk detail.'],report:['Laporan','Hasil outreach per negara dan per niche.'],settings:['Template & aturan','Jeda follow-up, batas kirim, template email, dan daftar jangan dihubungi.'],io:['Import / export','Masukkan hasil scraping dan simpan cadangan.']};
-const scope=()=>LEADS.filter(l=>UI.country==='ALL'||l.country===UI.country);
+/* ---------- ownership: who handles which lead ---------- */
+let USERS=[];
+const COUNTRY_NAME={AU:'Australia',US:'US'};
+const userName=u=>{const x=USERS.find(v=>v.username===u);return x?x.name:(u||'')};
+function ownerOf(l){if(l.owner&&USERS.some(u=>u.username===l.owner))return l.owner;const t=S.territory||{};for(const u in t){if((t[u]||[]).includes(l.country))return u}return ''}
+const isMe=()=>!!(UI.me&&ME);
+const mine=l=>!!ME&&ownerOf(l)===ME.username;
+const myTerritory=()=>((S.territory||{})[ME&&ME.username]||[]);
+const scope=()=>LEADS.filter(l=>(UI.country==='ALL'||l.country===UI.country)&&(!isMe()||mine(l)));
+const activeOwners=()=>Math.max(1,USERS.filter(u=>(S.territory||{})[u.username]&&S.territory[u.username].length).length);
+const dailyLimit=()=>isMe()?S.limit:S.limit*activeOwners();
+const quotaLeads=()=>isMe()?LEADS.filter(mine):LEADS;
+const inboxDone=()=>!!ME&&((DATA.meta.inbox||{})[ME.username]||'')===today();
+function setInbox(v){DATA.meta.inbox=Object.assign({},DATA.meta.inbox);DATA.meta.inbox[ME.username]=v;saveMeta()}
+const modeLabel=()=>{if(!isMe())return '';const t=myTerritory().map(c=>COUNTRY_NAME[c]||c);return 'Mode saya · '+(t.length?'Lead '+t.join(' & '):'Lead milikmu')+' · '};
 const byId=id=>LEADS.find(l=>String(l.id)===String(id));
 function curTheme(){const t=document.documentElement.getAttribute('data-theme');if(t)return t;return window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
 function toggleTheme(){const n=curTheme()==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);try{localStorage.setItem('bl-theme',n)}catch(e){}$('#theme-btn').innerHTML=ic(n==='dark'?'sun':'moon')}
@@ -273,8 +288,9 @@ function pageActions(){
 function render(){
   $$('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.view===UI.view));
   $$('#country button').forEach(b=>b.classList.toggle('on',b.dataset.country===UI.country));
+  $$('#mode button').forEach(b=>b.classList.toggle('on',(b.dataset.mode==='me')===isMe()));document.body.classList.toggle('me-mode',isMe());
   const t=TITLES[UI.view]||TITLES.today;$('#title').textContent=t[0];$('#crumb').textContent=t[0];
-  $('#subtitle').textContent=UI.view==='today'?new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · '+myTime(new Date())+' '+MYTZ:t[1];
+  $('#subtitle').textContent=modeLabel()+(UI.view==='today'?new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · '+myTime(new Date())+' '+MYTZ:t[1]);
   if($('#q').value!==UI.q)$('#q').value=UI.q;
   $('#page-actions').innerHTML=pageActions();
   $('#theme-btn').innerHTML=ic(curTheme()==='dark'?'sun':'moon');
@@ -295,7 +311,7 @@ function todayData(){const t=today(),L=scope();const act=L.map(l=>({l,a:na(l)}))
   const inSeq=L.filter(l=>['e1','e2','e3','mockup','paused'].includes(l.stage));
   const replies=act.filter(x=>x.a.k==='reply'||(['nudge','decide'].includes(x.a.k)&&isDue(x.a))).sort(byDue);
   const fus=act.filter(x=>x.a.k==='send'&&x.a.step>0&&isDue(x.a)).sort(byDue);
-  const sentToday=sentCount(t),remaining=Math.max(0,S.limit-sentToday),slots=Math.max(0,remaining-fus.length);
+  const sentToday=sentCount(t,quotaLeads()),remaining=Math.max(0,dailyLimit()-sentToday),slots=Math.max(0,remaining-fus.length);
   const rank={best:0,ok:1,edge:2,off:3};
   const readyAll=L.filter(l=>l.stage==='ready'&&l.email&&!l.dnc);
   const fresh=readyAll.slice().sort((a,b)=>rank[winState(tzOf(a))]-rank[winState(tzOf(b))]||byScore(a,b)).slice(0,slots);
@@ -305,10 +321,10 @@ function todayData(){const t=today(),L=scope();const act=L.map(l=>({l,a:na(l)}))
   const over=act.filter(x=>x.a.due&&x.a.due<t).length,dueToday=act.filter(x=>x.a.due===t).length;
   return{t,L,act,inSeq,replies,fus,sentToday,remaining,slots,fresh,readyAll,mock,closes,wakes,over,dueToday}}
 
-function vToday(){const D=todayData();const checked=DATA.meta.inboxChecked===D.t;
+function vToday(){if(isMe()&&!LEADS.some(mine))return '<div class="card empty"><b>Belum ada lead untukmu</b>Atur pembagian negara di Template & aturan → Pembagian lead.<div class="bar-actions" style="justify-content:center;margin-top:12px"><button class="btn" data-view="settings">Atur pembagian lead</button><button class="btn g" data-mode="team">Lihat semua lead tim</button></div></div>';const D=todayData();const checked=inboxDone();
   const nReply=D.replies.filter(x=>x.a.k==='reply').length,nQ=D.fus.length+D.fresh.length;
   const kpi=(icon,tone,title,num,sub,foot,attrs)=>'<div class="kpi '+tone+'"><div class="kpi-t"><span class="kpi-i">'+ic(icon)+'</span><div><b>'+title+'</b><small>'+sub+'</small></div></div><div class="kpi-n num">'+num+'</div><button class="kpi-f" '+attrs+'>'+foot+ic('arrow')+'</button></div>';
-  const stats='<div class="kpis"><div class="kpi feat"><div class="kpi-t"><span class="kpi-i">'+ic('send')+'</span><div><b>Terkirim hari ini</b><small>Kuota harian '+S.limit+' email</small></div></div><div class="kpi-n num">'+D.sentToday+'<span>/ '+S.limit+'</span></div><div class="bar"><i style="width:'+Math.min(100,D.sentToday/S.limit*100)+'%"></i></div><button class="kpi-f" data-act="queue" data-q="all"'+(nQ?'':' disabled')+'>'+(nQ?'Mulai kirim '+nQ+' email':'Antrean hari ini kosong')+ic('arrow')+'</button></div>'
+  const stats='<div class="kpis"><div class="kpi feat"><div class="kpi-t"><span class="kpi-i">'+ic('send')+'</span><div><b>Terkirim hari ini</b><small>Kuota harian '+dailyLimit()+' email'+(isMe()?'':' (tim)')+'</small></div></div><div class="kpi-n num">'+D.sentToday+'<span>/ '+dailyLimit()+'</span></div><div class="bar"><i style="width:'+Math.min(100,D.sentToday/dailyLimit()*100)+'%"></i></div><button class="kpi-f" data-act="queue" data-q="all"'+(nQ?'':' disabled')+'>'+(nQ?'Mulai kirim '+nQ+' email':'Antrean hari ini kosong')+ic('arrow')+'</button></div>'
    +kpi('alert',D.over?'red':'','Terlambat',D.over,D.over?'Kerjakan duluan':'Tidak ada yang telat','Lihat yang perlu tindakan','data-view="leads" data-ltab="todo"')
    +kpi('clock','','Jatuh tempo hari ini',D.dueToday,'Follow-up, balasan, mock-up','Lihat jadwal','data-view="schedule"')
    +kpi('inbox','','Menunggu balasanmu',nReply,'Balas maksimal '+S.replySla+' hari','Lihat respons','data-view="leads" data-ltab="resp"')+'</div>';
@@ -331,14 +347,14 @@ function vToday(){const D=todayData();const checked=DATA.meta.inboxChecked===D.t
   // 4 new email 1
   let b4='';
   if(!D.readyAll.length)b4='<div class="note info">Tidak ada lead yang siap dikirimi Email 1. Cari email untuk lead di tab <button class="link" data-view="leads" data-ltab="need">Cari email</button>, atau import hasil scraping baru.</div>';
-  else if(!D.slots)b4='<div class="note good">Kuota hari ini sudah terpakai ('+D.sentToday+'/'+S.limit+(D.fus.length?', termasuk '+D.fus.length+' follow-up':'')+'). Lanjut besok supaya reputasi email tetap aman.</div>';
+  else if(!D.slots)b4='<div class="note good">Kuota hari ini sudah terpakai ('+D.sentToday+'/'+dailyLimit()+(D.fus.length?', termasuk '+D.fus.length+' follow-up':'')+'). Lanjut besok supaya reputasi email tetap aman.</div>';
   else{const groups={};D.fresh.forEach(l=>{const tz=tzOf(l);(groups[tz]=groups[tz]||[]).push(l)});
     b4='<p class="sub">Diurutkan: yang sedang jam kerja di sana dulu, lalu skor tertinggi. Sisa '+D.readyAll.length+' lead siap kirim.</p>'
      +Object.keys(groups).map(tz=>{const w=winState(tz);return '<div class="region"><div class="region-h"><div><b>'+esc(TZ_NAME[tz]||tz)+'</b> <span class="tz '+w+'"><i></i>'+localTime(tz)+' di sana · '+WIN_LABEL[w]+'</span><div class="sub">'+esc(winText(tz))+'</div></div><button class="btn s" data-act="queue" data-q="tz:'+esc(tz)+'">Kirim grup ini ('+groups[tz].length+')</button></div>'
        +groups[tz].map(l=>'<div class="row"><div class="who" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span class="cc '+l.country+'">'+l.country+'</span>'+esc(l.city)+' · '+esc(l.niche)+' · skor '+(l.score||'–')+'</small></div><div class="acts"><button class="btn s" data-act="queue" data-q="one:'+l.id+'">Kirim</button></div></div>').join('')+'</div>'}).join('')
      +'<div class="bar-actions"><button class="btn l" data-act="queue" data-q="new">Mulai kirim '+D.fresh.length+' Email 1</button>'+(D.fus.length?'<button class="btn" data-act="queue" data-q="all">Kirim semua ('+(D.fus.length+D.fresh.length)+')</button>':'')+'</div>'}
   steps.push(step(4,D.slots&&D.readyAll.length?'act':'done','Kirim Email 1 baru',D.slots&&D.readyAll.length?D.fresh.length+' dari sisa kuota':null,
-   'Kuota harian '+S.limit+' email (atur di <button class="link" data-view="settings">Template & aturan</button>). Follow-up dihitung duluan.',b4));
+   'Kuota harian '+dailyLimit()+' email'+(isMe()?'':' untuk tim')+' (atur di <button class="link" data-view="settings">Template & aturan</button>). Follow-up dihitung duluan.',b4));
   // 5 mockups
   steps.push(step(5,D.mock.length?(D.mock.some(x=>dueCls(x.a.due)==='over')?'alert':'act'):'done','Kerjakan mock-up',D.mock.length||null,
    D.mock.length?'Janji di email: mock-up dikirim dalam '+S.mockupDays+' hari kerja setelah brief masuk.':'Belum ada brief masuk.',
@@ -397,13 +413,13 @@ function vLeads(){const L=scope();const counts={};LTABS.forEach(t=>counts[t[0]]=
    +'<div class="toolbar"><select id="f-niche" aria-label="Niche"><option value="">Semua niche</option>'+niches.map(n=>'<option'+(n===UI.niche?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select><select id="f-sort" aria-label="Urutkan">'+[['next','Urut: aksi berikutnya'],['score','Urut: skor'],['name','Urut: nama'],['upd','Urut: terakhir diubah']].map(o=>'<option value="'+o[0]+'"'+(UI.sort===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'+(UI.q?'<span class="tag">Cari: '+esc(UI.q)+'</span>':'')+'<span class="count">'+r.length+' lead</span></div>';
   if(!r.length)return h+'<div class="card empty"><b>'+(UI.ltab==='todo'?'Semua beres':'Kosong')+'</b>'+(UI.ltab==='todo'?'Tidak ada lead yang jatuh tempo atau menunggu balasanmu.':'Tidak ada lead di kelompok ini'+(UI.q?' yang cocok dengan pencarian':'')+'.')+'</div>';
   if(UI.lview==='card'){const max=150;return h+'<div class="lcards">'+r.slice(0,max).map(leadCard).join('')+'</div>'+(r.length>max?'<p class="sub" style="margin-top:12px">Menampilkan '+max+' dari '+r.length+' lead. Pakai filter atau pencarian.</p>':'')}
-  return h+'<div class="card"><div class="tblwrap"><table class="tbl"><thead><tr><th>Bisnis</th><th>Status</th><th>Sequence</th><th>Aksi berikutnya</th><th>Waktu di sana</th><th>Skor</th><th>Email</th></tr></thead><tbody>'
-   +r.map(l=>{const a=na(l);return '<tr data-open="'+l.id+'"><td><div class="biz"><span class="av">'+esc(initials(l.business))+'</span><div><b>'+esc(l.business)+'</b><small><span class="cc '+l.country+'">'+l.country+'</span> '+esc(l.city)+' · '+esc(l.niche)+'</small></div></div></td><td>'+pill(l.stage)+'</td><td>'+dots(l)+'</td><td class="na">'+(a?'<b>'+esc(a.t)+'</b>'+(a.due?'<span class="due '+dueCls(a.due)+'">'+esc(rel(a.due))+'</span>':a.queue?'<span class="due">Antre kuota harian</span>':''):'<span class="faint">Selesai'+(l.lostReason?' · '+esc(l.lostReason):l.wonValue?' · '+l.wonValue+' USD':'')+'</span>')+'</td><td>'+tzPill(l)+'</td><td class="num">'+(l.score||'–')+'</td><td class="em">'+(l.email?esc(l.email):'<span class="faint">—</span>')+'</td></tr>'}).join('')+'</tbody></table></div></div>'}
+  return h+'<div class="card"><div class="tblwrap"><table class="tbl"><thead><tr><th>Bisnis</th>'+(isMe()?'':'<th>PIC</th>')+'<th>Status</th><th>Sequence</th><th>Aksi berikutnya</th><th>Waktu di sana</th><th>Skor</th><th>Email</th></tr></thead><tbody>'
+   +r.map(l=>{const a=na(l);return '<tr data-open="'+l.id+'"><td><div class="biz"><span class="av">'+esc(initials(l.business))+'</span><div><b>'+esc(l.business)+'</b><small><span class="cc '+l.country+'">'+l.country+'</span> '+esc(l.city)+' · '+esc(l.niche)+'</small></div></div></td>'+(isMe()?'':'<td>'+picCell(l)+'</td>')+'<td>'+pill(l.stage)+'</td><td>'+dots(l)+'</td><td class="na">'+(a?'<b>'+esc(a.t)+'</b>'+(a.due?'<span class="due '+dueCls(a.due)+'">'+esc(rel(a.due))+'</span>':a.queue?'<span class="due">Antre kuota harian</span>':''):'<span class="faint">Selesai'+(l.lostReason?' · '+esc(l.lostReason):l.wonValue?' · '+l.wonValue+' USD':'')+'</span>')+'</td><td>'+tzPill(l)+'</td><td class="num">'+(l.score||'–')+'</td><td class="em">'+(l.email?esc(l.email):'<span class="faint">—</span>')+'</td></tr>'}).join('')+'</tbody></table></div></div>'}
 function vSchedule(){const items=agendaItems(13);const over=items.filter(x=>x.d==='over').sort((a,b)=>byDue(a,b));const map={};items.filter(x=>x.d!=='over').forEach(x=>{(map[x.d]=map[x.d]||[]).push(x)});
   const chip=x=>'<span class="chip" data-open="'+x.l.id+'"><i class="'+(KIND[x.a.k]||'k-close')+'"></i><span><b>'+esc(x.a.k==='send'?STEP[x.a.step]:KIND_NAME[x.a.k])+'</b> · '+esc(x.l.business)+'</span></span>';
   let h='<div class="legend" style="margin:0 0 12px"><span><i class="k-send"></i>Follow-up / last note</span><span><i class="k-reply"></i>Balas / tanya mock-up</span><span><i class="k-mockup"></i>Deadline mock-up</span><span><i class="k-close"></i>Tutup sequence</span><span><i class="k-wake"></i>Check-in</span></div><div class="agenda">';
   if(over.length)h+='<div class="card day over"><h4>Terlambat<small>'+over.length+' item</small></h4><div class="chips">'+over.map(chip).join('')+'</div></div>';
-  for(let i=0;i<14;i++){const d=addD(today(),i),xs=(map[d]||[]).sort(byDue);const sends=xs.filter(x=>x.a.k==='send').length;const wd=pd(d).getDay();const slots=Math.max(0,S.limit-sends);
+  for(let i=0;i<14;i++){const d=addD(today(),i),xs=(map[d]||[]).sort(byDue);const sends=xs.filter(x=>x.a.k==='send').length;const wd=pd(d).getDay();const slots=Math.max(0,dailyLimit()-sends);
     h+='<div class="card day'+(i===0?' today':'')+'"><h4>'+(i===0?'Hari ini':i===1?'Besok':fmtD(d))+'<small>'+(i<2?fmtD(d)+' · ':'')+(wd===0||wd===6?'akhir pekan · ':'')+(sends?sends+' follow-up, ':'')+slots+' slot Email 1</small></h4><div class="chips">'+(xs.length?xs.map(chip).join(''):'<span class="sub">Tidak ada jadwal. Pakai slot untuk Email 1 baru.</span>')+'</div></div>'}
   return h+'</div>'}
 
@@ -441,7 +457,7 @@ function vReport(){const L=scope(),t=today();
   return '<div class="rep">'+fun+'</div><div class="rep" style="margin-top:12px"><div class="card pad"><h3 class="h3">Email terkirim, 14 hari terakhir</h3><p class="sub">Email 1, follow-up, dan last note.</p>'+svg+'</div>'
    +'<div class="card pad"><h3 class="h3">Balasan per niche</h3><p class="sub">Niche mana yang paling responsif.</p>'+(nrows.length?'<div class="kv">'+nrows.map(x=>'<span>'+esc(x[0])+'</span><b class="num">'+x[1][1]+' / '+x[1][0]+' <span class="faint">('+Math.round(x[1][1]/x[1][0]*100)+'%)</span></b>').join('')+'</div>':'<p class="sub" style="margin-top:10px">Muncul setelah Email 1 pertama terkirim.</p>')+'</div>'
    +'<div class="card pad"><h3 class="h3">Alasan lost</h3>'+(Object.keys(lr).length?'<div class="kv">'+Object.entries(lr).sort((a,b)=>b[1]-a[1]).map(x=>'<span>'+esc(x[0])+'</span><b class="num">'+x[1]+'</b>').join('')+'</div>':'<p class="sub" style="margin-top:6px">Belum ada lead yang ditutup.</p>')+'</div>'
-   +'<div class="card pad"><h3 class="h3">Nilai project won</h3><p class="sub">Dari harga founding rate yang dicatat saat won.</p><div class="kv"><span>Total</span><b class="num">'+wonV.toLocaleString('en-US')+' USD</b><span>Jumlah project</span><b class="num">'+L.filter(l=>l.stage==='won').length+'</b></div></div></div>'}
+   +(isMe()?'':perPerson())+'<div class="card pad"><h3 class="h3">Nilai project won</h3><p class="sub">Dari harga founding rate yang dicatat saat won.</p><div class="kv"><span>Total</span><b class="num">'+wonV.toLocaleString('en-US')+' USD</b><span>Jumlah project</span><b class="num">'+L.filter(l=>l.stage==='won').length+'</b></div></div></div>'}
 
 /* settings */
 const TPL_VARS=['first_name','business','city','niche','reviews','rating','hook','sender','subject1','mockup_date'];
@@ -449,8 +465,8 @@ function vSettings(){const sq=S.tpl.seq||[],rp=S.tpl.replies||[];const sel=UI.tp
   return '<div class="two"><div class="card pad form"><h3 class="h3">Template email</h3><p class="sub">Email 1, follow-up, dan last note di sini dipakai untuk lead yang belum punya email personal (misalnya hasil import). Template balasan muncul di tab Balasan setiap lead.</p>'
    +'<div class="fld"><label for="tpl-sel">Template</label><select id="tpl-sel">'+sq.map((t,i)=>'<option value="seq:'+i+'"'+(sel==='seq:'+i?' selected':'')+'>Sequence · '+STEP[i]+'</option>').join('')+rp.map((t,i)=>'<option value="rep:'+i+'"'+(sel==='rep:'+i?' selected':'')+'>Balasan · '+esc(t.name)+'</option>').join('')+'</select></div>'
    +'<div class="fld"><label for="tpl-subj">Subjek</label><input id="tpl-subj" value="'+esc(cur.subject)+'"></div><div class="fld"><label for="tpl-body">Isi</label><textarea id="tpl-body" style="min-height:320px" spellcheck="false">'+esc(cur.body)+'</textarea><small>Variabel: '+TPL_VARS.map(v=>'<code>{{'+v+'}}</code>').join(' ')+'</small><small>Tulis sampai kalimat penutup saja. Signature ditambahkan otomatis '+(S.zohoSig?'oleh Zoho (logo, nama, alamat, kalimat &quot;reply no&quot;)':'oleh dashboard (nama, Bilder Labs, alamat pos, dan kalimat &quot;reply no&quot; untuk email outreach)')+'.</small></div><p class="flag" id="tpl-flag"></p></div>'
-   +'<div class="form"><div class="card pad form"><h3 class="h3">Aturan jadwal</h3><div class="f2">'
-   +num('limit','Batas kirim per hari',S.limit,'email')+num('fu','Follow-up setelah',S.fu,'hari dari Email 1')+num('ln','Last note di hari ke-',S.ln,'dari Email 1')+num('close','Tutup sequence setelah',S.close,'hari dari last note')+num('replySla','Balas lead dalam',S.replySla,'hari')+num('mockupDays','Mock-up dikirim dalam',S.mockupDays,'hari kerja')+num('nudge','Tanya pendapat mock-up setelah',S.nudge,'hari')+num('wakeDays','"Nanti saja" ditunda',S.wakeDays,'hari')+num('winStart','Jam kirim terbaik mulai',S.winStart,'waktu mereka')+num('winEnd','Sampai jam',S.winEnd,'waktu mereka')
+   +'<div class="form"><div class="card pad form"><h3 class="h3">Pembagian lead</h3><p class="sub">Siapa menangani negara mana. Dipakai untuk Mode saya, kolom PIC, dan laporan per orang. Lead tertentu bisa dipindah di detail lead (Ditangani oleh).</p>'+territoryRows()+'</div><div class="card pad form"><h3 class="h3">Aturan jadwal</h3><div class="f2">'
+   +num('limit','Batas kirim per orang per hari',S.limit,'email')+num('fu','Follow-up setelah',S.fu,'hari dari Email 1')+num('ln','Last note di hari ke-',S.ln,'dari Email 1')+num('close','Tutup sequence setelah',S.close,'hari dari last note')+num('replySla','Balas lead dalam',S.replySla,'hari')+num('mockupDays','Mock-up dikirim dalam',S.mockupDays,'hari kerja')+num('nudge','Tanya pendapat mock-up setelah',S.nudge,'hari')+num('wakeDays','"Nanti saja" ditunda',S.wakeDays,'hari')+num('winStart','Jam kirim terbaik mulai',S.winStart,'waktu mereka')+num('winEnd','Sampai jam',S.winEnd,'waktu mereka')
    +'</div></div><div class="card pad form"><h3 class="h3">Tanda tangan</h3><div class="fld"><label for="set-zohoSig">Signature di email</label><select id="set-zohoSig"><option value="1"'+(S.zohoSig?' selected':'')+'>Signature HTML dari Zoho</option><option value="0"'+(S.zohoSig?'':' selected')+'>Teks dari dashboard</option></select><small>'+(S.zohoSig?'Email yang disalin berhenti sebelum nama. Signature Zoho (logo, nama, alamat pos, kalimat &quot;reply no&quot;) yang menutup setiap email.':'Nama, Bilder Labs, dan alamat pos ditulis sebagai teks di akhir email.')+'</small></div><div class="fld"><label for="set-sender">Nama pengirim</label><input id="set-sender" data-set="sender" value="'+esc(S.sender)+'"></div><div class="fld"><label for="set-postal">Alamat pos bisnis</label><input id="set-postal" data-set="postal" value="'+esc(S.postal)+'" placeholder="Wajib untuk email ke US (CAN-SPAM)"><small>Menggantikan '+esc(POSTAL_PH)+' di semua email saat disalin.</small></div></div>'
    +'<div class="card pad form"><h3 class="h3">Jangan dihubungi</h3><div class="fld"><label for="set-dnc">Email atau domain, satu per baris</label><textarea id="set-dnc" data-set="dnc" placeholder="owner@contoh.com&#10;contoh.com.au">'+esc(S.dnc)+'</textarea><small>Lead yang menjawab "tidak tertarik" otomatis masuk daftar ini. Import CSV melewati alamat di sini.</small></div></div>'
    +'<div class="card pad"><h3 class="h3">Kata yang ditandai</h3><p class="code muted" style="margin-top:6px">'+SPAM.map(esc).join(' · ')+'</p></div></div></div>'}
@@ -497,6 +513,16 @@ function exportCSV(){const L=scope();const head=['id','business','country','city
   const rows=[head].concat(L.map(l=>{const a=na(l),s=l.sent||{},t=l.at||{},q=l.seq||[];return[l.id,l.business,l.country,l.city,l.niche,l.phone,l.email,l.emailConf,l.emailSource,l.contact,l.rating,l.reviews,l.score,(ST[l.stage]||[l.stage])[0],a?a.t:'',a&&a.due||'',s.e1||'',s.e2||'',s.e3||'',t.replied||'',t.brief||'',t.mockup||'',t.won||'',l.wonValue||'',l.lostReason||'',l.dnc?'yes':'',l.maps,l.websiteCheck,l.hook,(q[0]||{}).subject,(q[0]||{}).body,(q[1]||{}).subject,(q[1]||{}).body,(q[2]||{}).subject,(q[2]||{}).body,(l.log||[]).map(e=>e.d+' '+e.t).join(' | ')]}));
   saveFile('bilder-leads-'+UI.country.toLowerCase()+'-'+today()+'.csv',toCSV(rows))}
 
+/* ---------- team helpers ---------- */
+function territoryRows(){if(!USERS.length)return '<p class="sub">Belum ada user.</p>';const t=S.territory||{};
+  return '<div class="terr">'+USERS.map(u=>'<div class="terr-row"><span class="who2"><span class="av sm">'+esc(initials(u.name))+'</span>'+esc(u.name)+'</span><span class="terr-c">'+['AU','US'].map(c=>'<label><input type="checkbox" data-terr="'+esc(u.username)+'" value="'+c+'"'+((t[u.username]||[]).includes(c)?' checked':'')+'> '+COUNTRY_NAME[c]+'</label>').join('')+'</span></div>').join('')+'</div>'}
+function picCell(l){const o=ownerOf(l);return o?'<span class="who2"><span class="av sm">'+esc(initials(userName(o)))+'</span>'+esc(userName(o))+(l.owner?' <span class="faint" title="Dipindah manual">•</span>':'')+'</span>':'<span class="faint">Belum dibagi</span>'}
+function ownerField(l){if(!USERS.length)return '';const auto=(()=>{const t=S.territory||{};for(const u in t){if((t[u]||[]).includes(l.country))return u}return ''})();
+  return '<div class="fx full" style="margin-bottom:10px"><span>Ditangani oleh</span><p><select id="ed-owner" class="inline-sel"><option value="">Otomatis sesuai negara'+(auto?' ('+esc(userName(auto))+')':'')+'</option>'+USERS.map(u=>'<option value="'+esc(u.username)+'"'+(l.owner===u.username?' selected':'')+'>'+esc(u.name)+'</option>').join('')+'</select></p></div>'}
+function perPerson(){const w=weekStart();const rows=USERS.map(u=>{const L=LEADS.filter(l=>ownerOf(l)===u.username&&(UI.country==='ALL'||l.country===UI.country));let sent=0;for(const l of L){const s=l.sent||{};for(const k in s)if(s[k]>=w)sent++}
+    return [u,L.length,sent,L.filter(l=>l.at&&l.at.replied).length,L.filter(l=>l.at&&l.at.brief).length,L.filter(l=>l.stage==='won').length]});
+  return '<div class="card pad"><h3 class="h3">Per orang</h3><p class="sub">Lead yang ditangani, email minggu ini, dan hasil total.</p><div class="tblwrap" style="max-height:none;margin-top:8px"><table class="tbl" style="min-width:0"><thead><tr><th>PIC</th><th>Lead</th><th>Email minggu ini</th><th>Membalas</th><th>Brief</th><th>Won</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><span class="who2"><span class="av sm">'+esc(initials(r[0].name))+'</span>'+esc(r[0].name)+'</span></td>'+r.slice(1).map(v=>'<td class="num">'+v+'</td>').join('')+'</tr>').join('')+'</tbody></table></div></div>'}
+
 /* ---------- drawer ---------- */
 function openLead(id,tab,out){UI.open=id;UI.dtab=tab||'sum';UI.out=out||null;renderDrawer();rememberUI()}
 function closeLead(){UI.open=null;UI.out=null;renderDrawer();rememberUI()}
@@ -529,7 +555,7 @@ function renderDrawer(){const dr=$('#drawer'),sc=$('#scrim');const l=UI.open!=nu
 function dSum(l){const F=[['Email',l.email?'<span class="mono">'+esc(l.email)+'</span> <button class="btn s" data-copyi="'+cp(l.email)+'">Salin</button>':'<span class="faint">Belum ada</span>'],['Tingkat keyakinan email',esc(l.emailConf||'—')],['Nama kontak',esc(l.contact||'—')],['Telepon',l.phone?esc(l.phone)+' <button class="btn s" data-copyi="'+cp(l.phone)+'">Salin</button>':'—'],['Sumber email',esc(l.emailSource||'—'),1],['Cek website',esc(l.websiteCheck||'—'),1],['Personal hook',esc(l.hook||'—'),1]];
   if(l.facts)F.push(['Fakta untuk email',esc(l.facts),1]);
   const links=[l.maps?'<a class="btn s" href="'+esc(l.maps)+'" target="_blank" rel="noopener">Google Maps ↗</a>':'',l.facebook?'<a class="btn s" href="'+esc(l.facebook)+'" target="_blank" rel="noopener">Facebook ↗</a>':''].join('');
-  return '<div class="fields">'+F.map(f=>'<div class="fx'+(f[2]?' full':'')+'"><span>'+f[0]+'</span><p>'+f[1]+'</p></div>').join('')+'</div>'+(links?'<div class="bar-actions" style="margin-top:12px">'+links+'</div>':'')
+  return ownerField(l)+'<div class="fields">'+F.map(f=>'<div class="fx'+(f[2]?' full':'')+'"><span>'+f[0]+'</span><p>'+f[1]+'</p></div>').join('')+'</div>'+(links?'<div class="bar-actions" style="margin-top:12px">'+links+'</div>':'')
    +'<div class="card pad form" style="margin-top:14px"><h3 class="h3">Edit kontak</h3><div class="f2"><div class="fld"><label for="ed-email">Email</label><input id="ed-email" type="email" value="'+esc(l.email||'')+'"></div><div class="fld"><label for="ed-contact">Nama kontak</label><input id="ed-contact" value="'+esc(l.contact||'')+'"></div><div class="fld"><label for="ed-phone">Telepon</label><input id="ed-phone" value="'+esc(l.phone||'')+'"></div></div>'
    +'<div class="f2"><div class="fld"><label for="ed-stage">Ubah status manual</label><select id="ed-stage">'+STAGES.map(s=>'<option value="'+s+'"'+(s===l.stage?' selected':'')+'>'+ST[s][0]+'</option>').join('')+'</select><small>Pakai "Catat hasil" di atas kalau bisa, supaya tanggalnya ikut tercatat.</small></div></div><div class="bar-actions"><button class="btn s p" data-act="save-contact">Simpan</button></div></div>'}
 function dSeq(l){const seq=seqFor(l),s=l.sent||{},a=na(l);let h=seq[0]&&seq[0].generated?'<div class="note info" style="margin-bottom:12px">Lead ini belum punya email personal, jadi isinya dari template default. Tambahkan satu kalimat personal sebelum kirim.</div>':'';
@@ -557,8 +583,8 @@ function renderSend(){const box=$('#sendmode');const q=UI.queue;if(!q){box.hidde
   while(q.i<q.items.length){const it=q.items[q.i],l=byId(it.id),a=l&&na(l);if(l&&a&&a.k==='send'&&a.step===it.step&&l.email)break;q.i++}
   const n=q.items.length;
   const top='<div class="sm-top"><h3>Mode kirim</h3><span class="sub num">'+Math.min(q.i+1,n)+' dari '+n+'</span><div class="sm-prog"><i style="width:'+(q.i/n*100)+'%"></i></div><a class="btn s" href="https://mail.zoho.com/zm/" target="_blank" rel="noopener">Buka Zoho Mail ↗</a><button class="btn s g" data-act="q-exit">Selesai dulu</button></div>';
-  if(q.i>=n){box.innerHTML=top+'<div class="sm-body"><div class="sm-done"><b class="num">'+q.sent+'</b><h2 class="h3" style="font-size:18px">email ditandai terkirim</h2><p class="muted">'+(q.skipped?q.skipped+' dilewati dan tetap ada di daftar. ':'')+'Hari ini total '+sentCount(today())+' dari '+S.limit+' email.</p><button class="btn p" data-act="q-exit">Kembali ke Hari ini</button></div></div>';return}
-  const it=q.items[q.i],l=byId(it.id),m=seqFor(l)[it.step]||{subject:'',body:''};const hits=spamHits(m.subject+' '+m.body);const checked=DATA.meta.inboxChecked===today();const tz=tzOf(l),w=winState(tz);
+  if(q.i>=n){box.innerHTML=top+'<div class="sm-body"><div class="sm-done"><b class="num">'+q.sent+'</b><h2 class="h3" style="font-size:18px">email ditandai terkirim</h2><p class="muted">'+(q.skipped?q.skipped+' dilewati dan tetap ada di daftar. ':'')+'Hari ini total '+sentCount(today(),quotaLeads())+' dari '+dailyLimit()+' email.</p><button class="btn p" data-act="q-exit">Kembali ke Hari ini</button></div></div>';return}
+  const it=q.items[q.i],l=byId(it.id),m=seqFor(l)[it.step]||{subject:'',body:''};const hits=spamHits(m.subject+' '+m.body);const checked=inboxDone();const tz=tzOf(l),w=winState(tz);
   const warn=[];if(it.step>0&&!checked)warn.push('<div class="note">Pastikan '+esc(l.email)+' belum membalas di inbox Zoho sebelum kirim follow-up.</div>');
   if(it.step>0)warn.push('<div class="note info">Kirim sebagai balasan di thread Email 1 (folder Terkirim) supaya jadi satu percakapan.</div>');
   if(m.body.indexOf(POSTAL_PH)>-1)warn.push('<div class="note">Alamat pos belum diisi'+(l.country==='US'?' (wajib untuk US)':'')+'. Isi di Template & aturan, atau ganti manual sebelum kirim.</div>');
@@ -585,6 +611,7 @@ function onClick(e){const t=e.target.closest('button,[data-open],[data-view],[da
   if(ds_.view&&!ds_.open){UI.navOpen=false;UI.view=ds_.view;if(ds_.ltab)UI.ltab=ds_.ltab;UI.queue=null;UI.open=null;render();window.scrollTo(0,0);return}
   if(ds_.ltab&&!ds_.open){UI.ltab=ds_.ltab;render();return}
   if(ds_.country){UI.country=ds_.country;render();return}
+  if(ds_.mode){UI.me=ds_.mode==='me';UI.queue=null;render();toast(isMe()?'Mode saya: hanya lead yang kamu tangani':'Tampilan tim: semua lead');return}
   if(ds_.dtab&&!ds_.open&&t.closest('#drawer')){UI.dtab=ds_.dtab;renderDrawer();return}
   if(ds_.out&&!ds_.act){if(ds_.open){openLead(ds_.open,'sum',ds_.out);return}UI.out=UI.out===ds_.out?null:ds_.out;renderDrawer();return}
   if(ds_.open&&!ds_.act){openLead(ds_.open,ds_.dtab||'sum',ds_.out||null);return}
@@ -603,8 +630,8 @@ function onClick(e){const t=e.target.closest('button,[data-open],[data-view],[da
     case 'out':if(l)applyOut(l,ds_.o);break;
     case 'out-save':if(l&&UI.out){const v=$('#out-v');applyOut(l,UI.out,v?v.value:'')}break;
     case 'out-cancel':UI.out=null;renderDrawer();break;
-    case 'inbox-ok':DATA.meta.inboxChecked=today();saveMeta();render();toast('Inbox ditandai sudah dicek');break;
-    case 'inbox-undo':DATA.meta.inboxChecked='';saveMeta();render();break;
+    case 'inbox-ok':setInbox(today());render();toast('Inbox ditandai sudah dicek');break;
+    case 'inbox-undo':setInbox('');render();break;
     case 'close-all':{const D=todayData();D.closes.forEach(x=>change(x.l,OUT.close.f,OUT.close.log));render();toast(D.closes.length+' lead ditutup');break}
     case 'queue':startQueue(ds_.q);break;
     case 'q-exit':UI.queue=null;render();break;
@@ -630,6 +657,8 @@ function onInput(e){const t=e.target;
   if(t.dataset.set&&t.type!=='number'){S[t.dataset.set]=t.value;saveSettings();return}}
 function onChange(e){const t=e.target;
   if(t.id==='f-niche'){UI.niche=t.value;render();return}
+  if(t.dataset.terr!=null){const terr={};$$('input[data-terr]').forEach(x=>{if(x.checked)(terr[x.dataset.terr]=terr[x.dataset.terr]||[]).push(x.value)});S.territory=terr;saveSettings();render();toast('Pembagian lead disimpan');return}
+  if(t.id==='ed-owner'){const l=byId(UI.open);if(l){const v=t.value;const u=change(l,x=>{if(v)x.owner=v;else delete x.owner},v?'Ditangani oleh '+userName(v):'Penanganan kembali otomatis sesuai negara','note');render();toast('Disimpan',u)}return}
   if(t.id==='f-sort'){UI.sort=t.value;render();return}
   if(t.id==='tpl-sel'){UI.tplSel=t.value;render();return}
   if(t.dataset.set&&t.type==='number'){const v=Math.max(1,Math.round(+t.value||1));S[t.dataset.set]=v;saveSettings();toast('Aturan disimpan');return}
@@ -647,7 +676,7 @@ function onKey(e){if(e.key==='/'&&!/input|textarea|select/i.test(e.target.tagNam
 
 /* ---------- boot ---------- */
 async function start(){restoreUI();mount();$('#view').innerHTML='<div class="loading">'+ic('loader')+'Memuat data…</div>';$('#theme-btn').innerHTML=ic(curTheme()==='dark'?'sun':'moon');renderSave();
-  try{const d=await api('GET','/api/bootstrap');ME=d.user;CURSOR=d.cursor||'';setData(d);if(cleanTemplates())saveSettings();render()}
+  try{const d=await api('GET','/api/bootstrap');ME=d.user;USERS=d.users||[];CURSOR=d.cursor||'';setData(d);if(cleanTemplates())saveSettings();if(typeof UI.me!=='boolean')UI.me=myTerritory().length>0;render()}
   catch(e){$('#view').innerHTML='<div class="card empty"><b>Tidak bisa memuat data</b>'+esc(e.message)+'<div class="bar-actions" style="justify-content:center;margin-top:12px"><button class="btn" data-act="reload">Coba lagi</button></div></div>';return}
   setInterval(poll,20000);
   setInterval(()=>{if(UI.view==='today'&&UI.open==null&&!UI.queue&&!isTyping())render()},60000)}

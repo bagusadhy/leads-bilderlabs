@@ -484,3 +484,15 @@ textarea.notein{width:100%;min-height:64px;border:1px solid var(--line);border-r
 .kc[draggable="true"]:active{cursor:grabbing}
 .kc.dragging{opacity:.45}
 .col.over{outline:2px dashed var(--nav-on);outline-offset:-3px;background:var(--lime-soft)}
+
+/* team: mode saya, pembagian lead */
+#mode button.on{background:var(--nav-on);color:var(--nav-on-ink);box-shadow:none}
+#mode button.on .i{color:var(--nav-on-icon)}
+.seg .m{display:none}
+.terr{display:grid;gap:8px}
+.terr-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface-2)}
+.terr-c{display:flex;gap:14px}
+.terr-c label{display:inline-flex;gap:6px;align-items:center;font-size:13px;font-weight:500;cursor:pointer}
+.inline-sel{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 8px;background:var(--surface);margin-top:2px}
+@media (max-width:560px){.crumb{display:none}.seg .d{display:none}.seg .m{display:inline}#mode button{padding:5px 9px}body.me-mode #country{display:none}}
+@media (max-width:560px){.top-r{margin-left:auto}}

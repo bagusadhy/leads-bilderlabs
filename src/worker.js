@@ -145,8 +145,11 @@ const cursorNow = async (db) => (await db.prepare(`SELECT ${NOW} AS now`).first(
 app.get('/api/bootstrap', async (c) => {
   const db = c.env.DB;
   const cursor = await cursorNow(db);
-  const [leads, settings, meta] = await Promise.all([loadLeads(db), getSettings(db), getMeta(db)]);
-  return c.json({ user: c.get('user'), leads, settings, meta, cursor });
+  const [leads, settings, meta, users] = await Promise.all([
+    loadLeads(db), getSettings(db), getMeta(db),
+    db.prepare('SELECT id, username, name FROM users ORDER BY id').all(),
+  ]);
+  return c.json({ user: c.get('user'), users: users.results, leads, settings, meta, cursor });
 });
 
 app.get('/api/leads', async (c) => c.json({ leads: await loadLeads(c.env.DB) }));
@@ -278,11 +281,18 @@ app.put('/api/settings', async (c) => {
   return c.json({ ok: true });
 });
 
+/** "Inbox sudah dicek" is stored per person, so each teammate only marks their own inbox. */
 app.put('/api/meta', async (c) => {
+  const db = c.env.DB;
   const body = await readJson(c);
-  const meta = body.meta && typeof body.meta === 'object' ? body.meta : {};
-  await putSetting(c.env.DB, 'meta', { inboxChecked: String(meta.inboxChecked || '').slice(0, 10) });
-  return c.json({ ok: true });
+  const day = String(body.inboxChecked || '').slice(0, 10);
+  if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new HttpError(400, 'Tanggal tidak valid');
+  const user = c.get('user');
+  const meta = await getMeta(db);
+  const inbox = meta.inbox && typeof meta.inbox === 'object' ? meta.inbox : {};
+  inbox[user.username] = day;
+  await putSetting(db, 'meta', { inbox });
+  return c.json({ ok: true, meta: { inbox } });
 });
 
 app.get('/api/export.json', async (c) => {
