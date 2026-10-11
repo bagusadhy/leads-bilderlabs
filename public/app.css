@@ -478,3 +478,9 @@ textarea.notein{width:100%;min-height:64px;border:1px solid var(--line);border-r
 
 .tag .i{width:13px;height:13px}
 .lc-p{align-items:center}
+
+/* pipeline drag & drop */
+.kc[draggable="true"]{cursor:grab}
+.kc[draggable="true"]:active{cursor:grabbing}
+.kc.dragging{opacity:.45}
+.col.over{outline:2px dashed var(--nav-on);outline-offset:-3px;background:var(--lime-soft)}

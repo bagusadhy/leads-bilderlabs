@@ -243,7 +243,7 @@ const SHELL='<aside class="side" id="side">'
  +'<a class="btn s hide-m" href="https://mail.zoho.com/zm/" target="_blank" rel="noopener">'+ic('mail')+'Zoho Mail</a></div></header>'
  +'<div class="page"><div class="page-h"><div><h1 id="title"></h1><p id="subtitle"></p></div><div class="page-a" id="page-actions"></div></div><section id="view"></section></div></main>'
  +'<div class="scrim" id="scrim" hidden></div><aside class="drawer" id="drawer" role="dialog" aria-label="Detail lead" hidden></aside><div class="sendmode" id="sendmode" role="dialog" aria-label="Mode kirim" hidden></div><div class="toast" id="toast" role="status" hidden></div>';
-const TITLES={today:['Hari ini',''],leads:['Leads','Semua lead dikelompokkan per status. Klik untuk detail.'],schedule:['Jadwal','Apa yang jatuh tempo 14 hari ke depan, supaya tidak ada yang terlewat.'],pipeline:['Pipeline','Posisi setiap lead di alur outreach.'],report:['Laporan','Hasil outreach per negara dan per niche.'],settings:['Template & aturan','Jeda follow-up, batas kirim, template email, dan daftar jangan dihubungi.'],io:['Import / export','Masukkan hasil scraping dan simpan cadangan.']};
+const TITLES={today:['Hari ini',''],leads:['Leads','Semua lead dikelompokkan per status. Klik untuk detail.'],schedule:['Jadwal','Apa yang jatuh tempo 14 hari ke depan, supaya tidak ada yang terlewat.'],pipeline:['Pipeline','Seret kartu ke kolom lain untuk mengubah status. Klik kartu untuk detail.'],report:['Laporan','Hasil outreach per negara dan per niche.'],settings:['Template & aturan','Jeda follow-up, batas kirim, template email, dan daftar jangan dihubungi.'],io:['Import / export','Masukkan hasil scraping dan simpan cadangan.']};
 const scope=()=>LEADS.filter(l=>UI.country==='ALL'||l.country===UI.country);
 const byId=id=>LEADS.find(l=>String(l.id)===String(id));
 function curTheme(){const t=document.documentElement.getAttribute('data-theme');if(t)return t;return window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
@@ -396,7 +396,20 @@ function vSchedule(){const items=agendaItems(13);const over=items.filter(x=>x.d=
 /* pipeline */
 function vPipeline(){const cols=['ready','e1','e2','e3','replied','brief','mockup','paused','won','lost'];const L=scope();
   return '<div class="board">'+cols.map(c=>{const xs=L.filter(l=>c==='ready'?(l.stage==='ready'&&l.email):c==='lost'?(l.stage==='lost'||l.stage==='bounced'):l.stage===c).sort((a,b)=>{const x=na(a),y=na(b),dx=x&&x.due||'9',dy=y&&y.due||'9';return dx<dy?-1:dx>dy?1:byScore(a,b)});const show=xs.slice(0,30);
-    return '<div class="col"><h4>'+(c==='lost'?'Lost & bounce':ST[c][0])+'<b>'+xs.length+'</b></h4>'+show.map(l=>{const a=na(l);return '<div class="kc" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span>'+esc(l.city)+' · '+l.country+'</span>'+(a&&a.due?'<span class="due '+dueCls(a.due)+'">'+esc(diff(a.due,today())<0?'telat':a.due===today()?'hari ini':fmtDs(a.due))+'</span>':'')+'</small></div>'}).join('')+(xs.length>show.length?'<div class="more">+ '+(xs.length-show.length)+' lagi</div>':'')+(xs.length?'':'<p class="sub" style="padding:4px">Kosong</p>')+'</div>'}).join('')+'</div>'}
+    return '<div class="col" data-col="'+c+'"><h4>'+(c==='lost'?'Lost & bounce':ST[c][0])+'<b>'+xs.length+'</b></h4>'+show.map(l=>{const a=na(l);return '<div class="kc" draggable="true" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span>'+esc(l.city)+' · '+l.country+'</span>'+(a&&a.due?'<span class="due '+dueCls(a.due)+'">'+esc(diff(a.due,today())<0?'telat':a.due===today()?'hari ini':fmtDs(a.due))+'</span>':'')+'</small></div>'}).join('')+(xs.length>show.length?'<div class="more">+ '+(xs.length-show.length)+' lagi</div>':'')+(xs.length?'':'<p class="sub" style="padding:4px">Kosong</p>')+'</div>'}).join('')+'</div>'}
+
+/* Drag a pipeline card to another column. Dates are filled in the same way as the "Catat hasil" buttons. */
+const LATE=['replied','brief','mockup','paused','won','lost','bounced'];
+function moveTo(l,st){if(!l)return;const cur=l.stage==='bounced'?'lost':l.stage;if(cur===st)return;
+  const ask={paused:'later',won:'won',lost:'lost'};
+  if(ask[st]){openLead(l.id,'sum',ask[st]);toast('Lengkapi dulu: '+OUT[ask[st]].l);return}
+  let undo;
+  if(st==='ready'||/^e[123]$/.test(st)){const step=st==='ready'?-1:+st[1]-1;
+    undo=change(l,x=>{x.sent=x.sent||{};for(let i=0;i<3;i++){const k='e'+(i+1);if(i<=step){if(!x.sent[k])x.sent[k]=today()}else delete x.sent[k]}
+      if(LATE.includes(x.stage)){const a=at(x);['replied','brief','mockup','nudged','won','lost','wake'].forEach(k=>delete a[k]);delete x.lostReason;delete x.wonValue}
+      x.stage=st},st==='ready'?'Dikembalikan ke Belum dihubungi (Pipeline)':STEP[step]+' terkirim (Pipeline)',st==='ready'?'stage':'send')}
+  else{const o=OUT[{replied:'replied',brief:'brief',mockup:'mock'}[st]];if(!o)return;undo=change(l,o.f,o.log+' (Pipeline)',o.kind)}
+  render();toast(l.business+' → '+ST[st][0],undo)}
 
 /* report */
 function funnel(L){const c=L.filter(l=>l.sent&&l.sent.e1).length,r=L.filter(l=>l.at&&l.at.replied).length,b=L.filter(l=>l.at&&l.at.brief).length,m=L.filter(l=>l.at&&l.at.mockup).length,w=L.filter(l=>l.stage==='won').length;return[['Dihubungi',c],['Membalas',r],['Brief masuk',b],['Mock-up',m],['Won',w]]}
@@ -548,9 +561,11 @@ function mount(){const app=$('#app');app.innerHTML=SHELL;
   app.addEventListener('input',onInput);
   app.addEventListener('change',onChange);
   document.addEventListener('keydown',onKey);
-  app.addEventListener('dragover',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.add('over')}});
+  app.addEventListener('dragstart',e=>{const k=e.target.closest&&e.target.closest('.kc');if(!k)return;e.dataTransfer.setData('text/plain',k.dataset.open);e.dataTransfer.effectAllowed='move';k.classList.add('dragging')});
+  app.addEventListener('dragend',e=>{const k=e.target.closest&&e.target.closest('.kc');if(k)k.classList.remove('dragging');$$('.col.over').forEach(c=>c.classList.remove('over'))});
+  app.addEventListener('dragover',e=>{const board=e.target.closest&&e.target.closest('.board');if(board){const r=board.getBoundingClientRect(),edge=80;if(e.clientX>r.right-edge)board.scrollLeft+=18;else if(e.clientX<r.left+edge)board.scrollLeft-=18}const col=e.target.closest&&e.target.closest('.col[data-col]');if(col){e.preventDefault();e.dataTransfer.dropEffect='move';$$('.col.over').forEach(c=>{if(c!==col)c.classList.remove('over')});col.classList.add('over');return}const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.add('over')}});
   app.addEventListener('dragleave',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d)d.classList.remove('over')});
-  app.addEventListener('drop',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.remove('over');const f=e.dataTransfer.files[0];if(f)readFile(f)}})}
+  app.addEventListener('drop',e=>{const col=e.target.closest&&e.target.closest('.col[data-col]');if(col){e.preventDefault();col.classList.remove('over');moveTo(byId(e.dataTransfer.getData('text/plain')),col.dataset.col);return}const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.remove('over');const f=e.dataTransfer.files[0];if(f)readFile(f)}})}
 function onClick(e){const t=e.target.closest('button,[data-open],[data-view],[data-ltab],a,label');if(!t)return;const ds_=t.dataset;
   if(ds_.copyi){const v=CP.get(+ds_.copyi);if(v!=null)copyText(v,t);return}
   if(ds_.view&&!ds_.open){UI.navOpen=false;UI.view=ds_.view;if(ds_.ltab)UI.ltab=ds_.ltab;UI.queue=null;UI.open=null;render();window.scrollTo(0,0);return}
