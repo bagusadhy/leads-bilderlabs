@@ -118,6 +118,18 @@ Setelah langkah 1–4 di atas selesai dari laptop (database dan user tidak bisa 
 
 Kalau nanti ada file migrasi baru, jalankan `npm run db:migrate` dari laptop sebelum push.
 
+## Anggota tim & pembagian kerja
+
+Menu **Pengaturan** di dashboard:
+
+- **Tim:** setiap anggota punya kartu sendiri berisi negara yang ditangani, tugas (kirim outreach, balas lead, buat mock-up, riset email), batas kirim per hari, alamat pengirim, dan pilihan signature (HTML Zoho atau teks). **Mode saya** hanya menampilkan lead dan langkah harian sesuai kartu ini.
+- **Admin (Bagus & Andre)** satu-satunya yang bisa menambah anggota, memberi izin akses, mengubah nama, reset password, dan menonaktifkan anggota (tidak dihapus, riwayatnya tetap ada). Akun baru selalu berperan **anggota**; peran admin tidak bisa diberikan dari dashboard.
+- **Izin akses anggota** (dicentang admin): lihat lead seluruh tim, ubah template & pengaturan, import & export data, lihat laporan. Tanpa izin "lihat lead seluruh tim", server hanya mengirim lead yang ia tangani, jadi data orang lain tidak pernah sampai ke browsernya.
+- **Bisnis:** alamat pos dan daftar jangan dihubungi.
+- **Akun saya:** ganti nama tampilan, password, dan tema.
+
+Admin dibuat lewat `npm run user:add` (otomatis admin). Anggota berikutnya ditambahkan admin dari dashboard.
+
 ## Perintah sehari-hari
 
 ```bash
@@ -130,7 +142,7 @@ npx wrangler tail                       # lihat log server secara langsung
 
 Menu **Import / export → Cadangan JSON** juga mengunduh semua data dari browser. D1 juga menyimpan riwayat perubahan beberapa hari ke belakang (fitur Time Travel), jadi database bisa dikembalikan ke waktu tertentu kalau ada kesalahan.
 
-Kalau skema database berubah: tambahkan file baru di `migrations/` (misalnya `0002_…sql`), lalu `npm run db:migrate` dan `npm run deploy`.
+Kalau ada file baru di `migrations/`, **jalankan `npm run db:migrate` dulu**, baru deploy/push. Kode baru bisa membutuhkan kolom yang dibuat migrasi itu.
 
 ## Menambah lead baru
 

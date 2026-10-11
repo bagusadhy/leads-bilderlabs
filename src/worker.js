@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { verifyPassword, DUMMY_HASH, sha256, newToken, safeEqual } from './auth.js';
+import { verifyPassword, hashPassword, DUMMY_HASH, sha256, newToken, safeEqual } from './auth.js';
 import {
   HttpError, STAGES, NOW, cleanLead, cleanEvents, loadLeads, changedLeads,
   getSetting, putSetting, getSettings, getMeta,
@@ -54,6 +54,37 @@ async function readJson(c) {
   }
 }
 
+/* ---------- permissions ---------- */
+// What a member may do. Admins (and the API token) can do everything.
+const PERMS = ['team_view', 'templates', 'import', 'reports'];
+const DEFAULT_PERMS = { team_view: false, templates: false, import: false, reports: true };
+function parsePerms(v) {
+  let p = {};
+  try { p = typeof v === 'string' ? JSON.parse(v || '{}') : (v || {}); } catch { p = {}; }
+  return Object.fromEntries(PERMS.map((k) => [k, p[k] === undefined ? DEFAULT_PERMS[k] : !!p[k]]));
+}
+const cleanPerms = (p) => Object.fromEntries(PERMS.map((k) => [k, !!(p && p[k])]));
+const can = (user, perm) => !!user && (user.role === 'admin' || user.role === 'api' || !!user.perms?.[perm]);
+function requirePerm(c, perm, label) {
+  if (!can(c.get('user'), perm)) throw new HttpError(403, `Akunmu belum diberi izin untuk ${label}. Minta admin mengaturnya.`);
+}
+
+/** Which leads this person may see. Members without "team_view" only see leads they handle. */
+async function visibility(db, user) {
+  if (can(user, 'team_view')) return () => true;
+  const [settings, users] = await Promise.all([getSettings(db), db.prepare('SELECT username FROM users WHERE active = 1 ORDER BY id').all()]);
+  const team = settings.team || {};
+  const active = users.results.map((u) => u.username);
+  const countriesOf = (u) => (team[u] && Array.isArray(team[u].countries) ? team[u].countries : []);
+  const autoOwner = (country) => active.find((u) => countriesOf(u).includes(country)) || '';
+  const mine = team[user.username] || {};
+  const mockupAll = (mine.tasks?.mockup !== false) && mine.mockupScope === 'all';
+  return (lead) => {
+    const owner = lead.owner && active.includes(lead.owner) ? lead.owner : autoOwner(lead.country);
+    return owner === user.username || (mockupAll && (lead.stage === 'brief' || lead.stage === 'mockup'));
+  };
+}
+
 /* ---------- public routes ---------- */
 app.get('/api/health', async (c) => {
   await c.env.DB.prepare('SELECT 1').first();
@@ -69,7 +100,7 @@ app.post('/api/login', async (c) => {
   const body = await readJson(c);
   const username = String(body.username || '').trim().toLowerCase();
   const password = String(body.password || '');
-  const user = await db.prepare('SELECT id, username, name, password_hash FROM users WHERE username = ?').bind(username).first();
+  const user = await db.prepare('SELECT id, username, name, role, perms, password_hash FROM users WHERE username = ? AND active = 1').bind(username).first();
   const ok = await verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
   if (!user || !ok) {
     await db.prepare(
@@ -88,7 +119,7 @@ app.post('/api/login', async (c) => {
       .bind(await sha256(token), user.id, `+${days(c.env)} days`),
   ]);
   setCookie(c, COOKIE, token, { httpOnly: true, sameSite: 'Lax', secure: isHttps(c), path: '/', maxAge: days(c.env) * 86400 });
-  return c.json({ user: { id: user.id, username: user.username, name: user.name } });
+  return c.json({ user: { id: user.id, username: user.username, name: user.name, role: user.role, perms: parsePerms(user.perms) } });
 });
 
 /* ---------- auth for everything else under /api ---------- */
@@ -102,7 +133,7 @@ app.use('/api/*', async (c, next) => {
   if (auth.startsWith('Bearer ')) {
     if (!c.env.API_TOKEN || !safeEqual(auth.slice(7), c.env.API_TOKEN)) return c.json({ error: 'API token tidak valid' }, 401);
     if (!TOKEN_ROUTES.has(route)) return c.json({ error: 'API token hanya untuk GET /api/leads dan POST /api/leads/import' }, 403);
-    c.set('user', { id: null, username: 'api', name: 'API' });
+    c.set('user', { id: null, username: 'api', name: 'API', role: 'api' });
     return next();
   }
 
@@ -111,7 +142,7 @@ app.use('/api/*', async (c, next) => {
   const hash = await sha256(token);
   const db = c.env.DB;
   const s = await db.prepare(
-    `SELECT s.user_id, u.username, u.name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ${NOW}`
+    `SELECT s.user_id, u.username, u.name, u.role, u.perms FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ${NOW} AND u.active = 1`
   ).bind(hash).first();
   if (!s) {
     deleteCookie(c, COOKIE, { path: '/' });
@@ -126,7 +157,7 @@ app.use('/api/*', async (c, next) => {
       "UPDATE sessions SET expires_at = strftime('%Y-%m-%d %H:%M:%f', 'now', ?) WHERE token_hash = ? AND expires_at < strftime('%Y-%m-%d %H:%M:%f', 'now', ?)"
     ).bind(`+${d} days`, hash, `+${Math.floor(d / 2)} days`).run()
   );
-  c.set('user', { id: s.user_id, username: s.username, name: s.name });
+  c.set('user', { id: s.user_id, username: s.username, name: s.name, role: s.role, perms: parsePerms(s.perms) });
   c.set('token', hash);
   return next();
 });
@@ -140,19 +171,107 @@ app.post('/api/logout', async (c) => {
 
 app.get('/api/me', (c) => c.json({ user: c.get('user') }));
 
+/* ---------- team members ---------- */
+const USERNAME_RE = /^[a-z0-9._-]{2,60}$/;
+const listUsers = async (db) => (await db.prepare('SELECT id, username, name, role, active, perms, created_at FROM users ORDER BY id').all()).results.map((u) => ({ ...u, perms: parsePerms(u.perms) }));
+function requireAdmin(c) {
+  if (c.get('user')?.role !== 'admin') throw new HttpError(403, 'Hanya admin yang bisa mengatur anggota tim');
+}
+function cleanName(v) {
+  const name = String(v || '').trim().slice(0, 120);
+  if (!name) throw new HttpError(400, 'Nama wajib diisi');
+  return name;
+}
+function cleanPassword(v) {
+  const pw = String(v || '');
+  if (pw.length < 10) throw new HttpError(400, 'Password minimal 10 karakter');
+  if (pw.length > 200) throw new HttpError(400, 'Password terlalu panjang');
+  return pw;
+}
+
+app.get('/api/users', async (c) => c.json({ users: await listUsers(c.env.DB) }));
+
+app.post('/api/users', async (c) => {
+  requireAdmin(c);
+  const db = c.env.DB;
+  const body = await readJson(c);
+  const username = String(body.username || '').trim().toLowerCase();
+  if (!USERNAME_RE.test(username)) throw new HttpError(400, 'Username huruf kecil/angka tanpa spasi (2–60 karakter)');
+  const name = cleanName(body.name);
+  // New accounts are always members. Admins are only Bagus & Andre (or whoever is created with the CLI).
+  const perms = JSON.stringify(cleanPerms({ ...DEFAULT_PERMS, ...(body.perms || {}) }));
+  const hash = await hashPassword(cleanPassword(body.password));
+  const exists = await db.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
+  if (exists) throw new HttpError(409, `Username ${username} sudah dipakai`);
+  await db.prepare("INSERT INTO users (username, name, password_hash, role, perms) VALUES (?, ?, ?, 'member', ?)").bind(username, name, hash, perms).run();
+  return c.json({ users: await listUsers(db) });
+});
+
+app.put('/api/users/:id', async (c) => {
+  requireAdmin(c);
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const target = await db.prepare('SELECT id, role, active FROM users WHERE id = ?').bind(id).first();
+  if (!target) throw new HttpError(404, 'Anggota tidak ditemukan');
+  // Admin accounts are managed only by their owners (Akun saya) or the CLI.
+  if (target.role === 'admin') throw new HttpError(403, 'Akun admin tidak bisa diubah dari sini. Pemiliknya bisa mengubah nama dan password di Akun saya.');
+  const body = await readJson(c);
+  if (body.role !== undefined) throw new HttpError(400, 'Peran tidak bisa diubah. Akun baru selalu anggota.');
+  const sets = [];
+  const args = [];
+  if (body.name !== undefined) { sets.push('name = ?'); args.push(cleanName(body.name)); }
+  if (body.perms !== undefined) { sets.push('perms = ?'); args.push(JSON.stringify(cleanPerms(body.perms))); }
+  const nextActive = body.active === undefined ? target.active : (body.active ? 1 : 0);
+  if (body.active !== undefined) { sets.push('active = ?'); args.push(nextActive); }
+  if (body.password !== undefined) { sets.push('password_hash = ?'); args.push(await hashPassword(cleanPassword(body.password))); }
+  if (!sets.length) throw new HttpError(400, 'Tidak ada perubahan');
+  const statements = [db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...args, id)];
+  // New password or deactivation logs the person out everywhere.
+  if (body.password !== undefined || !nextActive) statements.push(db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id));
+  await db.batch(statements);
+  return c.json({ users: await listUsers(db) });
+});
+
+/** Change your own display name. */
+app.put('/api/me', async (c) => {
+  const me = c.get('user');
+  if (!me.id) throw new HttpError(403, 'Tidak tersedia untuk API token');
+  const body = await readJson(c);
+  await c.env.DB.prepare('UPDATE users SET name = ? WHERE id = ?').bind(cleanName(body.name), me.id).run();
+  return c.json({ users: await listUsers(c.env.DB) });
+});
+
+/** Change your own password (needs the current one). Other sessions are logged out. */
+app.put('/api/me/password', async (c) => {
+  const me = c.get('user');
+  if (!me.id) throw new HttpError(403, 'Tidak tersedia untuk API token');
+  const db = c.env.DB;
+  const body = await readJson(c);
+  const row = await db.prepare('SELECT password_hash FROM users WHERE id = ?').bind(me.id).first();
+  if (!row || !(await verifyPassword(String(body.current || ''), row.password_hash))) throw new HttpError(400, 'Password lama salah');
+  const hash = await hashPassword(cleanPassword(body.password));
+  await db.batch([
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash, me.id),
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').bind(me.id, c.get('token')),
+  ]);
+  return c.json({ ok: true });
+});
+
 const cursorNow = async (db) => (await db.prepare(`SELECT ${NOW} AS now`).first()).now;
 
 app.get('/api/bootstrap', async (c) => {
   const db = c.env.DB;
   const cursor = await cursorNow(db);
-  const [leads, settings, meta, users] = await Promise.all([
-    loadLeads(db), getSettings(db), getMeta(db),
-    db.prepare('SELECT id, username, name FROM users ORDER BY id').all(),
-  ]);
-  return c.json({ user: c.get('user'), users: users.results, leads, settings, meta, cursor });
+  const user = c.get('user');
+  const [leads, settings, meta, users, visible] = await Promise.all([loadLeads(db), getSettings(db), getMeta(db), listUsers(db), visibility(db, user)]);
+  return c.json({ user, users, leads: leads.filter(visible), settings, meta, cursor });
 });
 
-app.get('/api/leads', async (c) => c.json({ leads: await loadLeads(c.env.DB) }));
+app.get('/api/leads', async (c) => {
+  const db = c.env.DB;
+  const [leads, visible] = await Promise.all([loadLeads(db), visibility(db, c.get('user'))]);
+  return c.json({ leads: leads.filter(visible) });
+});
 
 /** Everything that changed since the cursor, so other devices and teammates stay in sync. */
 app.get('/api/changes', async (c) => {
@@ -160,8 +279,8 @@ app.get('/api/changes', async (c) => {
   const since = c.req.query('since') || '1970-01-01 00:00:00';
   if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(since)) throw new HttpError(400, 'Parameter since tidak valid');
   const cursor = await cursorNow(db);
-  const [leads, settingsRow, metaRow] = await Promise.all([changedLeads(db, since), getSetting(db, 'main'), getSetting(db, 'meta')]);
-  const out = { leads, cursor };
+  const [leads, settingsRow, metaRow, visible] = await Promise.all([changedLeads(db, since), getSetting(db, 'main'), getSetting(db, 'meta'), visibility(db, c.get('user'))]);
+  const out = { leads: leads.filter(visible), cursor };
   if (settingsRow && settingsRow.updatedAt > since) out.settings = await getSettings(db);
   if (metaRow && metaRow.updatedAt > since) out.meta = metaRow.value;
   return c.json(out);
@@ -177,6 +296,15 @@ app.put('/api/leads/:id', async (c) => {
   const events = cleanEvents(body.events, 20);
   const version = Number(body.version) || 0;
   const user = c.get('user');
+  const [before] = await loadLeads(db, [id]);
+  if (!before) throw new HttpError(404, 'Lead tidak ditemukan');
+  if (!(await visibility(db, user))(before)) throw new HttpError(403, 'Lead ini bukan bagianmu');
+  if (user.role !== 'admin') {
+    // Only admins move leads between people.
+    const data = JSON.parse(lead.data);
+    if (before.owner) data.owner = before.owner; else delete data.owner;
+    lead.data = JSON.stringify(data);
+  }
 
   // One transaction: the update only applies when the version still matches, and the
   // activity rows are only written when that update actually changed a row.
@@ -207,6 +335,7 @@ app.post('/api/leads/import', async (c) => {
   const list = Array.isArray(body.leads) ? body.leads : [];
   if (!list.length) throw new HttpError(400, 'Tidak ada lead untuk diimpor');
   if (list.length > IMPORT_MAX) throw new HttpError(413, `Maksimal ${IMPORT_MAX} lead per permintaan. Kirim bertahap.`);
+  requirePerm(c, 'import', 'import lead');
   const user = c.get('user');
 
   const [existing, settings] = await Promise.all([
@@ -277,7 +406,14 @@ app.post('/api/leads/import', async (c) => {
 app.put('/api/settings', async (c) => {
   const body = await readJson(c);
   if (!body.settings || typeof body.settings !== 'object' || Array.isArray(body.settings)) throw new HttpError(400, 'Pengaturan tidak valid');
-  await putSetting(c.env.DB, 'main', body.settings);
+  requirePerm(c, 'templates', 'mengubah template & pengaturan');
+  const settings = { ...body.settings };
+  if (c.get('user').role !== 'admin') {
+    // Members never change who handles what.
+    const stored = await getSetting(c.env.DB, 'main');
+    settings.team = stored?.value?.team || {};
+  }
+  await putSetting(c.env.DB, 'main', settings);
   return c.json({ ok: true });
 });
 
@@ -296,8 +432,10 @@ app.put('/api/meta', async (c) => {
 });
 
 app.get('/api/export.json', async (c) => {
+  requirePerm(c, 'import', 'export data');
   const db = c.env.DB;
-  const [leads, settings, meta] = await Promise.all([loadLeads(db), getSettings(db), getMeta(db)]);
+  const [all, settings, meta, visible] = await Promise.all([loadLeads(db), getSettings(db), getMeta(db), visibility(db, c.get('user'))]);
+  const leads = all.filter(visible);
   c.header('Content-Disposition', `attachment; filename="bilder-leads-backup-${new Date().toISOString().slice(0, 10)}.json"`);
   return c.json({ v: 1, exportedAt: new Date().toISOString(), leads, settings, meta });
 });

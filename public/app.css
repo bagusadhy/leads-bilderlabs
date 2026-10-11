@@ -496,3 +496,21 @@ textarea.notein{width:100%;min-height:64px;border:1px solid var(--line);border-r
 .inline-sel{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 8px;background:var(--surface);margin-top:2px}
 @media (max-width:560px){.crumb{display:none}.seg .d{display:none}.seg .m{display:inline}#mode button{padding:5px 9px}body.me-mode #country{display:none}}
 @media (max-width:560px){.top-r{margin-left:auto}}
+
+/* Pengaturan */
+.ucards{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px}
+.ucard{padding:16px 18px;display:grid;gap:12px}
+.ucard-h{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.ucard-h > div:nth-child(2){flex:1;min-width:0}
+.ucard-h b{display:flex;gap:8px;align-items:center;font-weight:650;font-size:15px}
+.ucard-h small{display:block;color:var(--muted);font-size:12.5px}
+.ucard-a{display:flex;gap:6px;flex-wrap:wrap}
+.ucard-b{display:grid;gap:12px}
+.tasks{display:grid;gap:6px}
+.task{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface-2);cursor:pointer}
+.task input{margin-top:3px}
+.task b{display:block;font-weight:600;font-size:13px}
+.task small{display:block;font-size:12px;color:var(--muted)}
+.ucard input[disabled],.ucard select[disabled]{opacity:.6;cursor:not-allowed}
+@media (max-width:560px){.ucards{grid-template-columns:1fr}}
+.perm-line{margin-top:-6px}
