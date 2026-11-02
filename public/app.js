@@ -89,6 +89,7 @@ const tzPill=l=>{const tz=tzOf(l),w=winState(tz);return '<span class="tz '+w+'" 
 /* ---------- stages & next action ---------- */
 const ST={need:['Cari email','s-mute'],check:['Cek website','s-warn'],ready:['Belum dihubungi','s-blue'],e1:['Email 1 terkirim','s-teal'],e2:['Follow-up terkirim','s-teal'],e3:['Last note terkirim','s-teal'],replied:['Membalas','s-orange'],brief:['Brief masuk','s-lime'],mockup:['Mock-up terkirim','s-lime'],paused:['Ditunda','s-violet'],won:['Won','s-won'],lost:['Lost','s-red'],bounced:['Bounce','s-red']};
 const STAGES=Object.keys(ST);
+const ccTag=l=>l.country&&l.country!=='US'?'<span class="cc '+esc(l.country)+'">'+esc(l.country)+'</span>':'';
 const pill=st=>'<span class="pill '+(ST[st]||ST.need)[1]+'">'+esc((ST[st]||[st])[0])+'</span>';
 const STEP=['Email 1','Follow-up','Last note'];
 const KIND={send:'k-send',reply:'k-reply',nudge:'k-reply',decide:'k-reply',mockup:'k-mockup',close:'k-close',wake:'k-wake'};
@@ -138,11 +139,11 @@ function cleanTemplates(){let changed=false;['seq','replies'].forEach(g=>(S.tpl[
 function seqFor(l){if(l.seq&&l.seq.length)return l.seq.map(s=>({subject:s.subject,body:finish(s.body,'seq')}));return (S.tpl.seq||[]).map(s=>({subject:fill(s.subject,l),body:finish(fill(s.body,l),'seq'),generated:true}))}
 
 /* ---------- server sync ---------- */
-const UI={view:'today',country:'ALL',q:'',ltab:'todo',niche:'',sort:'next',open:null,dtab:'sum',out:null,queue:null,inboxQ:'',lview:'list',navOpen:false};
+const UI={view:'today',who:'all',sub:'all',sel:new Set(),q:'',ltab:'new',niche:'',sort:'next',open:null,dtab:'sum',out:null,queue:null,inboxQ:'',lview:'list',navOpen:false};
 let ME=null,CURSOR='',SAVE='ok',lastSaved='',errMsg='',online=true,needRender=false;
 const PEND=new Map();let leadTimer=null,setTimer=null,metaTimer=null,retryTimer=null,flushing=false,setPending=false,metaPending=false;
-function rememberUI(){try{localStorage.setItem('bl-ui',JSON.stringify({view:UI.view,country:UI.country,ltab:UI.ltab,lview:UI.lview,sort:UI.sort,me:UI.me}))}catch(e){}}
-function restoreUI(){try{const s=JSON.parse(localStorage.getItem('bl-ui')||'{}');['view','country','ltab','lview','sort'].forEach(k=>{if(typeof s[k]==='string')UI[k]=s[k]});if(typeof s.me==='boolean')UI.me=s.me}catch(e){}}
+function rememberUI(){try{localStorage.setItem('bl-ui',JSON.stringify({view:UI.view,who:UI.who,ltab:UI.ltab,lview:UI.lview,sort:UI.sort,me:UI.me}))}catch(e){}}
+function restoreUI(){try{const s=JSON.parse(localStorage.getItem('bl-ui')||'{}');['view','who','ltab','lview','sort'].forEach(k=>{if(typeof s[k]==='string')UI[k]=s[k]});if(!LTABS.some(t=>t[0]===UI.ltab))UI.ltab='new';if(typeof s.me==='boolean')UI.me=s.me}catch(e){}}
 async function api(method,url,body){let r;
   try{r=await fetch(url,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Requested-With':'bilder'},body:body===undefined?undefined:JSON.stringify(body)})}
   catch(e){const err=new Error('Tidak bisa terhubung ke server');err.offline=true;throw err}
@@ -254,12 +255,12 @@ const SHELL='<aside class="side" id="side">'
  +'<button class="side-scrim" data-act="menu" aria-label="Tutup menu"></button>'
  +'<main class="main"><header class="topbar"><button class="icon-btn only-m" data-act="menu" aria-label="Buka menu">'+ic('menu')+'</button>'
  +'<div class="crumb"><span>Bilder Labs</span>'+ic('chev')+'<b id="crumb"></b></div>'
- +'<div class="top-r"><div class="seg" id="mode" role="group" aria-label="Tampilan"><button data-mode="team" title="Semua lead tim">'+ic('users')+'<span class="d">Tim</span></button><button data-mode="me" title="Hanya lead yang kamu tangani">'+ic('user')+'<span class="d">Saya</span></button></div><div class="seg" id="country"><button data-country="ALL">Semua</button><button data-country="AU"><span class="d">Australia</span><span class="m">AU</span></button><button data-country="US">US</button></div>'
+ +'<div class="top-r"><div class="seg" id="mode" role="group" aria-label="Tampilan"><button data-mode="team" title="Semua lead tim">'+ic('users')+'<span class="d">Tim</span></button><button data-mode="me" title="Hanya lead yang kamu tangani">'+ic('user')+'<span class="d">Saya</span></button></div>'
  +'<button class="icon-btn" data-act="theme" id="theme-btn" aria-label="Ganti tema terang atau gelap"></button>'
  +'<a class="btn s hide-m" href="https://mail.zoho.com/zm/" target="_blank" rel="noopener">'+ic('mail')+'Zoho Mail</a></div></header>'
  +'<div class="page"><div class="page-h"><div><h1 id="title"></h1><p id="subtitle"></p></div><div class="page-a" id="page-actions"></div></div><section id="view"></section></div></main>'
  +'<div class="scrim" id="scrim" hidden></div><aside class="drawer" id="drawer" role="dialog" aria-label="Detail lead" hidden></aside><div class="sendmode" id="sendmode" role="dialog" aria-label="Mode kirim" hidden></div><div class="toast" id="toast" role="status" hidden></div>';
-const TITLES={today:['Hari ini',''],leads:['Leads','Semua lead dikelompokkan per status. Klik untuk detail.'],schedule:['Jadwal','Apa yang jatuh tempo 14 hari ke depan, supaya tidak ada yang terlewat.'],pipeline:['Pipeline','Seret kartu ke kolom lain untuk mengubah status. Klik kartu untuk detail.'],report:['Laporan','Hasil outreach per negara dan per niche.'],settings:['Template & aturan','Template email dan aturan jadwal follow-up.'],io:['Import / export','Masukkan hasil scraping dan simpan cadangan.'],prefs:['Pengaturan','Anggota tim, tugas masing-masing, data bisnis, dan akun kamu.']};
+const TITLES={today:['Hari ini',''],leads:['Leads','Belum diproses dan yang sedang dalam sequence dipisah. Klik lead untuk detail.'],schedule:['Jadwal','Apa yang jatuh tempo 14 hari ke depan, supaya tidak ada yang terlewat.'],pipeline:['Pipeline','Seret kartu ke kolom lain untuk mengubah status. Klik kartu untuk detail.'],report:['Laporan','Hasil outreach per niche dan per orang.'],settings:['Template & aturan','Template email dan aturan jadwal follow-up.'],io:['Import / export','Masukkan hasil scraping dan simpan cadangan.'],prefs:['Pengaturan','Anggota tim, tugas masing-masing, data bisnis, dan akun kamu.']};
 /* ---------- ownership: who handles which lead ---------- */
 let USERS=[];
 const COUNTRY_NAME={AU:'Australia',US:'US'};
@@ -267,8 +268,13 @@ const userName=u=>{const x=USERS.find(v=>v.username===u);return x?x.name:(u||'')
 const activeUsers=()=>USERS.filter(u=>u.active!==0);
 const TASKS=[['outreach','Kirim outreach','Email 1, follow-up, last note, tutup sequence, dan check-in untuk lead miliknya.'],['reply','Balas lead yang merespons','Menjawab balasan, minta brief, dan tanya pendapat soal mock-up.'],['mockup','Buat mock-up','Mengerjakan mock-up setelah brief masuk.'],['research','Riset email','Mencari email untuk lead yang belum punya.']];
 function teamOf(u){const t=(S.team||{})[u]||{};return{countries:t.countries||[],tasks:Object.assign({outreach:true,reply:true,mockup:true,research:true},t.tasks||{}),mockupScope:t.mockupScope||'own',limit:+t.limit||0,from:t.from||'hello@bilderlabs.com',sig:t.sig||(S.zohoSig===false?'text':'zoho')}}
-function autoOwner(l){for(const u of activeUsers()){if(teamOf(u.username).countries.includes(l.country))return u.username}return ''}
-function ownerOf(l){if(l.owner&&activeUsers().some(u=>u.username===l.owner))return l.owner;return autoOwner(l)}
+/* Leads are handed out by an admin ("Bagikan ke"). No owner = belum dibagi. */
+function ownerOf(l){return l.owner&&activeUsers().some(u=>u.username===l.owner)?l.owner:''}
+/* Never emailed yet: the "Belum diproses" pile. */
+const untouched=l=>['need','check','ready'].includes(l.stage)&&!(l.sent&&l.sent.e1);
+/* Focus is the US. Old non-US leads only show while they are still being worked, or when switched on in Pengaturan → Bisnis. */
+const inMarket=l=>l.country==='US'||!!S.showOldAU||(!untouched(l)&&!['won','lost','bounced'].includes(l.stage));
+const outreachUsers=()=>activeUsers().filter(u=>teamOf(u.username).tasks.outreach);
 const myTasks=()=>isMe()?teamOf(ME.username).tasks:{outreach:true,reply:true,mockup:true,research:true};
 const sigMode=()=>ME?teamOf(ME.username).sig:(S.zohoSig===false?'text':'zoho');
 /* One-time move from the old country mapping to per-person settings. */
@@ -276,13 +282,13 @@ function migrateTeam(){if(S.team&&Object.keys(S.team).length)return false;const 
   for(const u of USERS){if(old[u.username])team[u.username]={countries:old[u.username].slice()}}if(!Object.keys(team).length)return false;S.team=team;delete S.territory;return true}
 const isMe=()=>!!(UI.me&&ME);
 const mine=l=>!!ME&&ownerOf(l)===ME.username;
-const myTerritory=()=>ME?teamOf(ME.username).countries:[];
-const scope=()=>LEADS.filter(l=>(UI.country==='ALL'||l.country===UI.country)&&(!isMe()||mine(l)));
-const dailyLimit=()=>{if(isMe())return teamOf(ME.username).limit||S.limit;let n=0;for(const u of activeUsers()){const t=teamOf(u.username);if(t.countries.length)n+=t.limit||S.limit}return n||S.limit};
+const scope=()=>LEADS.filter(l=>inMarket(l)&&(!isMe()||mine(l)));
+const whoOk=l=>isMe()||UI.who==='all'||(UI.who==='none'?!ownerOf(l):ownerOf(l)===UI.who);
+const dailyLimit=()=>{if(isMe())return teamOf(ME.username).limit||S.limit;let n=0;for(const u of activeUsers()){const t=teamOf(u.username);if(t.tasks.outreach)n+=t.limit||S.limit}return n||S.limit};
 const quotaLeads=()=>isMe()?LEADS.filter(mine):LEADS;
 const inboxDone=()=>!!ME&&((DATA.meta.inbox||{})[ME.username]||'')===today();
 function setInbox(v){DATA.meta.inbox=Object.assign({},DATA.meta.inbox);DATA.meta.inbox[ME.username]=v;saveMeta()}
-const modeLabel=()=>{if(!isMe())return '';const t=myTerritory().map(c=>COUNTRY_NAME[c]||c);return 'Mode saya · '+(t.length?'Lead '+t.join(' & '):'Lead milikmu')+' · '};
+const modeLabel=()=>isMe()?'Mode saya · Lead yang dibagikan ke kamu · ':'';
 const byId=id=>LEADS.find(l=>String(l.id)===String(id));
 function curTheme(){const t=document.documentElement.getAttribute('data-theme');if(t)return t;return window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
 function toggleTheme(){const n=curTheme()==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);try{localStorage.setItem('bl-theme',n)}catch(e){}$('#theme-btn').innerHTML=ic(n==='dark'?'sun':'moon')}
@@ -300,7 +306,6 @@ function render(){
   if(!canDo('team_view'))UI.me=true;
   $$('.nav button').forEach(b=>{b.classList.toggle('on',b.dataset.view===UI.view);if(b.dataset.view in allowed)b.hidden=!allowed[b.dataset.view]});
   $('#mode').hidden=!canDo('team_view');
-  $$('#country button').forEach(b=>b.classList.toggle('on',b.dataset.country===UI.country));
   $$('#mode button').forEach(b=>b.classList.toggle('on',(b.dataset.mode==='me')===isMe()));document.body.classList.toggle('me-mode',isMe());
   const t=TITLES[UI.view]||TITLES.today;$('#title').textContent=t[0];$('#crumb').textContent=t[0];
   $('#subtitle').textContent=(['today','leads','schedule','pipeline','report'].includes(UI.view)?modeLabel():'')+(UI.view==='today'?new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · '+myTime(new Date())+' '+MYTZ:t[1]);
@@ -316,8 +321,8 @@ function render(){
 function badges(){const L=scope();let due=0,todo=0;for(const l of L){const a=na(l);if(isDue(a)){due++;todo++}else if(a&&a.k==='reply')todo++}
   const b=$('#nb-today');b.textContent=due||'';b.hidden=!due;b.classList.toggle('hot',due>0);
   const c=$('#nb-leads');c.textContent=L.length;}
-function rowLead(l,a,acts,extra){return '<div class="row"><div class="who" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span class="cc '+l.country+'">'+l.country+'</span>'+esc(l.city)+(a&&a.due?' · <span class="due '+dueCls(a.due)+'">'+esc(rel(a.due))+'</span>':'')+(extra||'')+'</small></div><div class="acts">'+(acts||'')+'</div></div>'}
-function list(items,fn,max){max=max||8;return '<div class="rows">'+items.slice(0,max).map(fn).join('')+(items.length>max?'<div class="more">+ '+(items.length-max)+' lagi · <button class="link" data-view="leads" data-ltab="todo">lihat semua</button></div>':'')+'</div>'}
+function rowLead(l,a,acts,extra){return '<div class="row"><div class="who" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small>'+ccTag(l)+''+esc(l.city)+(a&&a.due?' · <span class="due '+dueCls(a.due)+'">'+esc(rel(a.due))+'</span>':'')+(extra||'')+'</small></div><div class="acts">'+(acts||'')+'</div></div>'}
+function list(items,fn,max){max=max||8;return '<div class="rows">'+items.slice(0,max).map(fn).join('')+(items.length>max?'<div class="more">+ '+(items.length-max)+' lagi · <button class="link" data-view="schedule">lihat jadwal</button></div>':'')+'</div>'}
 function step(n,cls,title,cnt,hint,body){return '<li class="step '+cls+'"><div class="step-n">'+(cls==='done'?'✓':n)+'</div><div><div class="step-h"><h3>'+title+'</h3>'+(cnt!=null?'<span class="cnt">'+cnt+'</span>':'')+'</div>'+(hint?'<p class="hint">'+hint+'</p>':'')+(body?'<div class="body">'+body+'</div>':'')+'</div></li>'}
 
 function todayData(){const t=today(),L=scope();const act=L.map(l=>({l,a:na(l)})).filter(x=>x.a);
@@ -326,20 +331,21 @@ function todayData(){const t=today(),L=scope();const act=L.map(l=>({l,a:na(l)}))
   const fus=act.filter(x=>x.a.k==='send'&&x.a.step>0&&isDue(x.a)).sort(byDue);
   const sentToday=sentCount(t,quotaLeads()),remaining=Math.max(0,dailyLimit()-sentToday),slots=Math.max(0,remaining-fus.length);
   const rank={best:0,ok:1,edge:2,off:3};
-  const readyAll=L.filter(l=>l.stage==='ready'&&l.email&&!l.dnc);
+  const readyAll=L.filter(l=>l.stage==='ready'&&l.email&&!l.dnc&&ownerOf(l));
+  const unassigned=LEADS.filter(l=>inMarket(l)&&untouched(l)&&!ownerOf(l)).length;
   const fresh=readyAll.slice().sort((a,b)=>rank[winState(tzOf(a))]-rank[winState(tzOf(b))]||byScore(a,b)).slice(0,slots);
-  const mockSrc=(isMe()&&teamOf(ME.username).tasks.mockup&&teamOf(ME.username).mockupScope==='all')?LEADS.filter(l=>UI.country==='ALL'||l.country===UI.country).map(l=>({l,a:na(l)})).filter(x=>x.a):act;
+  const mockSrc=(isMe()&&teamOf(ME.username).tasks.mockup&&teamOf(ME.username).mockupScope==='all')?LEADS.filter(inMarket).map(l=>({l,a:na(l)})).filter(x=>x.a):act;
   const mock=mockSrc.filter(x=>x.a.k==='mockup').sort(byDue);
   const closes=act.filter(x=>x.a.k==='close'&&isDue(x.a)).sort(byDue);
   const wakes=act.filter(x=>x.a.k==='wake'&&isDue(x.a)).sort(byDue);
   const over=act.filter(x=>x.a.due&&x.a.due<t).length,dueToday=act.filter(x=>x.a.due===t).length;
-  return{t,L,act,inSeq,replies,fus,sentToday,remaining,slots,fresh,readyAll,mock,closes,wakes,over,dueToday}}
+  return{t,L,act,inSeq,replies,fus,sentToday,remaining,slots,fresh,readyAll,mock,closes,wakes,over,dueToday,unassigned}}
 
-function vToday(){if(isMe()&&!LEADS.some(mine))return '<div class="card empty"><b>Belum ada lead untukmu</b>'+(isAdmin()?'Atur negara yang kamu tangani di Pengaturan → Tim.':'Minta admin mengatur negara atau lead yang kamu tangani.')+'<div class="bar-actions" style="justify-content:center;margin-top:12px"><button class="btn" data-view="prefs">Buka Pengaturan</button>'+(canDo('team_view')?'<button class="btn g" data-mode="team">Lihat semua lead tim</button>':'')+'</div></div>';const D=todayData();const checked=inboxDone();const T=myTasks();let sn=0;const N=()=>++sn;
+function vToday(){if(isMe()&&!LEADS.some(mine))return '<div class="card empty"><b>Belum ada lead yang dibagikan ke kamu</b>'+(isAdmin()?'Bagikan lead di halaman Leads → Belum diproses → Belum dibagi.':'Minta admin (Bagus atau Andre) membagikan lead ke kamu.')+'<div class="bar-actions" style="justify-content:center;margin-top:12px">'+(isAdmin()?'<button class="btn l" data-view="leads" data-ltab="new" data-who="none">Bagikan lead</button>':'')+(canDo('team_view')?'<button class="btn g" data-mode="team">Lihat semua lead tim</button>':'')+'</div></div>';const D=todayData();const checked=inboxDone();const T=myTasks();let sn=0;const N=()=>++sn;
   const nReply=D.replies.filter(x=>x.a.k==='reply').length,nQ=D.fus.length+D.fresh.length;
   const kpi=(icon,tone,title,num,sub,foot,attrs)=>'<div class="kpi '+tone+'"><div class="kpi-t"><span class="kpi-i">'+ic(icon)+'</span><div><b>'+title+'</b><small>'+sub+'</small></div></div><div class="kpi-n num">'+num+'</div><button class="kpi-f" '+attrs+'>'+foot+ic('arrow')+'</button></div>';
   const stats='<div class="kpis"><div class="kpi feat"><div class="kpi-t"><span class="kpi-i">'+ic('send')+'</span><div><b>Terkirim hari ini</b><small>Kuota harian '+dailyLimit()+' email'+(isMe()?'':' (tim)')+'</small></div></div><div class="kpi-n num">'+D.sentToday+'<span>/ '+dailyLimit()+'</span></div><div class="bar"><i style="width:'+Math.min(100,D.sentToday/dailyLimit()*100)+'%"></i></div><button class="kpi-f" data-act="queue" data-q="all"'+(nQ?'':' disabled')+'>'+(nQ?'Mulai kirim '+nQ+' email':'Antrean hari ini kosong')+ic('arrow')+'</button></div>'
-   +kpi('alert',D.over?'red':'','Terlambat',D.over,D.over?'Kerjakan duluan':'Tidak ada yang telat','Lihat yang perlu tindakan','data-view="leads" data-ltab="todo"')
+   +kpi('alert',D.over?'red':'','Terlambat',D.over,D.over?'Kerjakan duluan':'Tidak ada yang telat','Lihat jadwal','data-view="schedule"')
    +kpi('clock','','Jatuh tempo hari ini',D.dueToday,'Follow-up, balasan, mock-up','Lihat jadwal','data-view="schedule"')
    +kpi('inbox','','Menunggu balasanmu',nReply,'Balas maksimal '+S.replySla+' hari','Lihat respons','data-view="leads" data-ltab="resp"')+'</div>';
   const steps=[];
@@ -360,12 +366,12 @@ function vToday(){if(isMe()&&!LEADS.some(mine))return '<div class="card empty"><
      +'<div class="bar-actions"><button class="btn l" data-act="queue" data-q="fu">Mulai kirim '+D.fus.length+' email</button></div>'):''));
   // 4 new email 1
   let b4='';
-  if(!D.readyAll.length)b4='<div class="note info">Tidak ada lead yang siap dikirimi Email 1. Cari email untuk lead di tab <button class="link" data-view="leads" data-ltab="need">Cari email</button>, atau import hasil scraping baru.</div>';
+  if(!D.readyAll.length)b4='<div class="note info">Tidak ada lead yang siap dikirimi Email 1. '+(D.unassigned?'Ada '+D.unassigned+' lead yang belum dibagi. <button class="link" data-view="leads" data-ltab="new" data-who="none">Bagikan dulu</button> supaya masuk antrean.':'Cari email untuk lead di <button class="link" data-view="leads" data-ltab="new" data-sub="research">Belum diproses → Perlu riset</button>, atau import hasil scraping baru.')+'</div>';
   else if(!D.slots)b4='<div class="note good">Kuota hari ini sudah terpakai ('+D.sentToday+'/'+dailyLimit()+(D.fus.length?', termasuk '+D.fus.length+' follow-up':'')+'). Lanjut besok supaya reputasi email tetap aman.</div>';
   else{const groups={};D.fresh.forEach(l=>{const tz=tzOf(l);(groups[tz]=groups[tz]||[]).push(l)});
     b4='<p class="sub">Diurutkan: yang sedang jam kerja di sana dulu, lalu skor tertinggi. Sisa '+D.readyAll.length+' lead siap kirim.</p>'
      +Object.keys(groups).map(tz=>{const w=winState(tz);return '<div class="region"><div class="region-h"><div><b>'+esc(TZ_NAME[tz]||tz)+'</b> <span class="tz '+w+'"><i></i>'+localTime(tz)+' di sana · '+WIN_LABEL[w]+'</span><div class="sub">'+esc(winText(tz))+'</div></div><button class="btn s" data-act="queue" data-q="tz:'+esc(tz)+'">Kirim grup ini ('+groups[tz].length+')</button></div>'
-       +groups[tz].map(l=>'<div class="row"><div class="who" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span class="cc '+l.country+'">'+l.country+'</span>'+esc(l.city)+' · '+esc(l.niche)+' · skor '+(l.score||'–')+'</small></div><div class="acts"><button class="btn s" data-act="queue" data-q="one:'+l.id+'">Kirim</button></div></div>').join('')+'</div>'}).join('')
+       +groups[tz].map(l=>'<div class="row"><div class="who" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small>'+ccTag(l)+''+esc(l.city)+' · '+esc(l.niche)+' · skor '+(l.score||'–')+'</small></div><div class="acts"><button class="btn s" data-act="queue" data-q="one:'+l.id+'">Kirim</button></div></div>').join('')+'</div>'}).join('')
      +'<div class="bar-actions"><button class="btn l" data-act="queue" data-q="new">Mulai kirim '+D.fresh.length+' Email 1</button>'+(D.fus.length?'<button class="btn" data-act="queue" data-q="all">Kirim semua ('+(D.fus.length+D.fresh.length)+')</button>':'')+'</div>'}
   if(T.outreach)steps.push(step(N(),D.slots&&D.readyAll.length?'act':'done','Kirim Email 1 baru',D.slots&&D.readyAll.length?D.fresh.length+' dari sisa kuota':null,
    'Kuota harian '+dailyLimit()+' email'+(isMe()?'':' untuk tim')+' (atur di <button class="link" data-view="settings">Template & aturan</button>). Follow-up dihitung duluan.',b4));
@@ -381,7 +387,8 @@ function vToday(){if(isMe()&&!LEADS.some(mine))return '<div class="card empty"><
   if(T.outreach)steps.push(step(N(),D.wakes.length?'act':'done','Hubungi lagi yang ditunda',D.wakes.length||null,
    D.wakes.length?'Mereka pernah bilang "nanti saja". Kirim check-in singkat (template ada di tab Balasan).':'Tidak ada lead tertunda yang jatuh tempo.',
    D.wakes.length?list(D.wakes,x=>rowLead(x.l,x.a,'<button class="btn s p" data-open="'+x.l.id+'" data-dtab="reply">Buka</button>')):''));
-  return stats+'<div class="grid-today"><ol class="steps">'+steps.join('')+'</ol><div class="rail">'+(T.outreach?railTimes(D):'')+railWeek()+railStats()+(T.research?railResearch():'')+'</div></div>'}
+  const handout=D.unassigned&&!isMe()?'<div class="note info handout"><span><b>'+D.unassigned+' lead baru belum dibagi.</b> Lead ini belum masuk antrean siapa pun. '+(isAdmin()?'Bagikan ke Bagus atau Andre dulu.':'Minta admin membagikannya.')+'</span>'+(isAdmin()?'<button class="btn s l" data-view="leads" data-ltab="new" data-who="none">Bagikan sekarang</button>':'')+'</div>':'';
+  return handout+stats+'<div class="grid-today"><ol class="steps">'+steps.join('')+'</ol><div class="rail">'+(T.outreach?railTimes(D):'')+railWeek()+railStats()+(T.research?railResearch():'')+'</div></div>'}
 
 function renderInbox(){const box=$('#inbox-res');if(!box)return;const q=UI.inboxQ.trim().toLowerCase();
   if(!q){box.innerHTML='';return}
@@ -404,31 +411,63 @@ function railStats(){const w=weekStart(),L=scope();let sent=0,rep=0,brief=0,won=
   for(const l of L){const s=l.sent||{},a=l.at||{};for(const k in s)if(s[k]>=w)sent++;if(a.replied>=w)rep++;if(a.brief>=w)brief++;if(a.won>=w)won++}
   return '<div class="card pad"><h3 class="h3">Minggu ini</h3><p class="sub">Sejak Senin, '+fmtDs(w)+'.</p><div class="mini"><div><span>Email terkirim</span><b class="num">'+sent+'</b></div><div><span>Balasan</span><b class="num">'+rep+'</b></div><div><span>Brief masuk</span><b class="num">'+brief+'</b></div><div><span>Won</span><b class="num">'+won+'</b></div></div></div>'}
 function railResearch(){const L=scope();const need=L.filter(l=>l.stage==='need'||(l.stage==='ready'&&!l.email)).length,chk=L.filter(l=>l.stage==='check').length;
-  return '<div class="card pad"><h3 class="h3">Tugas riset</h3><p class="sub">'+need+' lead belum punya email, '+chk+' perlu dicek websitenya. Kerjakan bertahap dengan Claude lalu import.</p><div class="bar-actions" style="margin-top:10px"><button class="btn s" data-view="leads" data-ltab="need">Lihat daftar</button></div></div>'}
+  return '<div class="card pad"><h3 class="h3">Tugas riset</h3><p class="sub">'+need+' lead belum punya email, '+chk+' perlu dicek websitenya. Kerjakan bertahap dengan Claude lalu import.</p><div class="bar-actions" style="margin-top:10px"><button class="btn s" data-view="leads" data-ltab="new" data-sub="research">Lihat daftar</button></div></div>'}
 
 /* leads */
-const LTABS=[['todo','Perlu tindakan'],['ready','Belum dihubungi'],['need','Cari email'],['seq','Dalam sequence'],['resp','Respons'],['paused','Ditunda'],['won','Won'],['closed','Lost & bounce'],['all','Semua']];
-function inTab(l,tab){const a=na(l);switch(tab){case 'todo':return isDue(a)||(a&&a.k==='reply');case 'ready':return l.stage==='ready'&&!!l.email;case 'need':return l.stage==='need'||l.stage==='check'||(l.stage==='ready'&&!l.email);case 'seq':return ['e1','e2','e3'].includes(l.stage);case 'resp':return ['replied','brief','mockup'].includes(l.stage);case 'paused':return l.stage==='paused';case 'won':return l.stage==='won';case 'closed':return l.stage==='lost'||l.stage==='bounced';default:return true}}
-function leadsFiltered(){const q=UI.q.trim().toLowerCase();let r=scope().filter(l=>inTab(l,UI.ltab));
+const LTABS=[['new','Belum diproses','Belum pernah dikirimi email'],['seq','Dalam sequence','Email 1 · follow-up · last note'],['resp','Respons','Membalas · brief · mock-up'],['done','Selesai','Won · lost · bounce'],['paused','Ditunda',''],['all','Semua','']];
+const SUBS={new:[['all','Semua'],['ready','Siap dikirim'],['research','Perlu riset email']],seq:[['all','Semua'],['due','Jatuh tempo'],['e1','Sudah Email 1'],['e2','Sudah follow-up'],['e3','Sudah last note']]};
+function inTab(l,tab){switch(tab){case 'new':return untouched(l);case 'seq':return ['e1','e2','e3'].includes(l.stage);case 'resp':return ['replied','brief','mockup'].includes(l.stage);case 'paused':return l.stage==='paused';case 'done':return ['won','lost','bounced'].includes(l.stage);default:return true}}
+function inSub(l){const s=UI.sub||'all';if(s==='all')return true;
+  if(UI.ltab==='new')return s==='ready'?(l.stage==='ready'&&!!l.email):!(l.stage==='ready'&&l.email);
+  if(UI.ltab==='seq')return s==='due'?isDue(na(l)):l.stage===s;return true}
+function leadsFiltered(){const q=UI.q.trim().toLowerCase();let r=scope().filter(l=>inTab(l,UI.ltab)&&whoOk(l)&&inSub(l));
   if(q)r=r.filter(l=>[l.business,l.city,l.email,l.niche,l.phone,l.contact].join(' ').toLowerCase().includes(q));
   if(UI.niche)r=r.filter(l=>l.niche===UI.niche);
   const s=UI.sort;r.sort((a,b)=>{if(s==='name')return a.business.localeCompare(b.business);if(s==='score')return byScore(a,b);if(s==='upd')return String(b.upd||'').localeCompare(String(a.upd||''));const x=na(a),y=na(b);const dx=x&&x.due||(x&&x.queue?'8':'9'),dy=y&&y.due||(y&&y.queue?'8':'9');return dx<dy?-1:dx>dy?1:byScore(a,b)});return r}
 function progress(l){const m={need:[0,'Belum ada email'],check:[0,'Cek website'],ready:[0,'Belum dihubungi'],e1:[1,'Email 1 dari 3'],e2:[2,'Email 2 dari 3'],e3:[3,'Email 3 dari 3'],replied:[4,'Sudah membalas'],brief:[5,'Brief masuk'],mockup:[6,'Mock-up terkirim'],won:[7,'Won'],paused:[4,'Ditunda'],lost:[7,'Ditutup'],bounced:[1,'Bounce']};const x=m[l.stage]||[0,''];return{n:x[0],label:x[1],pct:Math.round(x[0]/7*100)}}
 function nextShort(l){const a=na(l);if(!a)return '<span class="due">'+ic('calendar')+'Selesai</span>';if(!a.due)return '<span class="due">'+ic('calendar')+(a.queue?'Antre kuota':'Belum dijadwalkan')+'</span>';const n=diff(a.due,today());return '<span class="due '+dueCls(a.due)+'">'+ic('calendar')+(n<0?'Telat '+(-n)+' hari':n===0?'Hari ini':n===1?'Besok':fmtDs(a.due))+'</span>'}
 function leadCard(l){const a=na(l),p=progress(l),tone=l.stage==='won'?'won':(l.stage==='lost'||l.stage==='bounced')?'lost':'';
-  return '<article class="lc" data-open="'+l.id+'"><div class="lc-h"><b>'+esc(l.business)+'</b><span class="cc '+l.country+'">'+l.country+'</span></div>'
+  return '<article class="lc" data-open="'+l.id+'"><div class="lc-h"><b>'+esc(l.business)+'</b>'+ccTag(l)+(isMe()?'':ownerChip(l))+'</div>'
    +'<div class="lc-p">'+pill(l.stage)+'<span>'+esc(a?a.t:(l.lostReason||l.wonValue&&l.wonValue+' USD'||''))+'</span></div>'
    +'<div class="prog '+tone+'"><i style="width:'+Math.max(p.pct,4)+'%"></i></div>'
    +'<div class="lc-m"><div><small>Kontak</small>'+(l.contact?'<span class="who2"><span class="av sm">'+esc(initials(l.contact))+'</span>'+esc(l.contact)+'</span>':'<span class="faint" style="font-size:13px">Belum ada nama</span>')+'</div><div><small>Aksi berikutnya</small>'+nextShort(l)+'</div></div>'
    +'<div class="tags">'+(l.score?'<span class="tag'+(l.score>=8?' t-hot':'')+'">Skor '+l.score+'</span>':'')+'<span class="tag t-niche">'+esc(l.niche)+'</span>'+(['e1','e2','e3'].includes(l.stage)?'<span class="tag">'+ic('mail')+esc(p.label)+'</span>':'')+'</div></article>'}
-function vLeads(){const L=scope();const counts={};LTABS.forEach(t=>counts[t[0]]=L.filter(l=>inTab(l,t[0])).length);
+function ownerChip(l){const o=ownerOf(l);return o?'<span class="ochip" title="Ditangani '+esc(userName(o))+'"><span class="av sm">'+esc(initials(userName(o)))+'</span>'+esc(userName(o))+'</span>':'<span class="ochip none">Belum dibagi</span>'}
+const canAssign=()=>isAdmin()&&!isMe();
+function vLeads(){const L=scope();const cnt=t=>L.filter(l=>inTab(l,t)&&whoOk(l)).length;
   const niches=[...new Set(L.map(l=>l.niche).filter(Boolean))].sort();const r=leadsFiltered();
-  const h='<div class="utabs">'+LTABS.map(t=>'<button class="utab'+(UI.ltab===t[0]?' on':'')+(t[0]==='todo'&&counts.todo?' red':'')+'" data-ltab="'+t[0]+'">'+t[1]+'<em>'+counts[t[0]]+'</em></button>').join('')+'</div>'
-   +'<div class="toolbar"><select id="f-niche" aria-label="Niche"><option value="">Semua niche</option>'+niches.map(n=>'<option'+(n===UI.niche?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select><select id="f-sort" aria-label="Urutkan">'+[['next','Urut: aksi berikutnya'],['score','Urut: skor'],['name','Urut: nama'],['upd','Urut: terakhir diubah']].map(o=>'<option value="'+o[0]+'"'+(UI.sort===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'+(UI.q?'<span class="tag">Cari: '+esc(UI.q)+'</span>':'')+'<span class="count">'+r.length+' lead</span></div>';
-  if(!r.length)return h+'<div class="card empty"><b>'+(UI.ltab==='todo'?'Semua beres':'Kosong')+'</b>'+(UI.ltab==='todo'?'Tidak ada lead yang jatuh tempo atau menunggu balasanmu.':'Tidak ada lead di kelompok ini'+(UI.q?' yang cocok dengan pencarian':'')+'.')+'</div>';
+  // 1. the big split: not started vs in sequence vs replied vs finished
+  const lanes='<div class="lanes">'+LTABS.slice(0,4).map((t,i)=>'<button class="lane'+(UI.ltab===t[0]?' on':'')+'" data-ltab="'+t[0]+'"><span class="lane-n">'+(i+1)+'</span><span class="lane-t"><b>'+t[1]+'</b><small>'+t[2]+'</small></span><em class="num">'+cnt(t[0])+'</em></button>').join('')+'</div>';
+  // 2. whose leads
+  const tabL=L.filter(l=>inTab(l,UI.ltab));
+  const who=isMe()?'':'<div class="whobar"><span class="sub">PIC</span><div class="seg">'+[['all','Semua',tabL.length],['none','Belum dibagi',tabL.filter(l=>!ownerOf(l)).length]].concat(activeUsers().map(u=>[u.username,u.name,tabL.filter(l=>ownerOf(l)===u.username).length])).map(x=>'<button data-who="'+esc(x[0])+'" class="'+(UI.who===x[0]?'on':'')+(x[0]==='none'&&x[2]&&UI.ltab==='new'?' warn':'')+'">'+esc(x[1])+' <em>'+x[2]+'</em></button>').join('')+'</div>'
+    +'<span class="whobar-r">'+LTABS.slice(4).map(t=>'<button class="link'+(UI.ltab===t[0]?' on':'')+'" data-ltab="'+t[0]+'">'+t[1]+' ('+cnt(t[0])+')</button>').join(' · ')+'</span></div>';
+  // 3. sub-filters inside a lane
+  const subs=SUBS[UI.ltab]?'<div class="chips subs">'+SUBS[UI.ltab].map(x=>{const n=scope().filter(l=>inTab(l,UI.ltab)&&whoOk(l)&&(x[0]==='all'||(()=>{const o=UI.sub;UI.sub=x[0];const ok=inSub(l);UI.sub=o;return ok})())).length;return '<button class="subchip'+((UI.sub||'all')===x[0]?' on':'')+'" data-sub="'+x[0]+'">'+x[1]+' <em>'+n+'</em></button>'}).join('')+'</div>':'';
+  // 4. hand-out tools (admins)
+  const unRows=r.filter(l=>!ownerOf(l)&&untouched(l));
+  let tools='';
+  if(canAssign()){
+    if(UI.sel.size)tools='<div class="bulkbar"><b>'+UI.sel.size+' dipilih</b><span class="sub">Bagikan ke</span>'+activeUsers().map(u=>'<button class="btn s l" data-act="assign" data-owner="'+esc(u.username)+'">'+esc(u.name)+'</button>').join('')+'<button class="btn s" data-act="assign" data-owner="">Jadikan belum dibagi</button><button class="btn s g" data-act="sel-clear">Batal pilih</button></div>';
+    else if(unRows.length&&outreachUsers().length>1)tools='<div class="bulkbar soft"><span><b>'+unRows.length+' lead di daftar ini belum dibagi.</b> Centang lead lalu pilih orangnya, atau bagi rata otomatis (skor tertinggi diselang-seling supaya adil).</span><button class="btn s l" data-act="split">Bagi rata ke '+outreachUsers().map(u=>esc(u.name)).join(' & ')+'</button></div>';
+    else if(UI.ltab==='new'&&!UI.sel.size)tools='<p class="sub hint-sel">Centang lead untuk membagikan atau memindahkannya ke orang lain.</p>';
+  }
+  const bar='<div class="toolbar"><select id="f-niche" aria-label="Niche"><option value="">Semua niche</option>'+niches.map(n=>'<option'+(n===UI.niche?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select><select id="f-sort" aria-label="Urutkan">'+[['next','Urut: aksi berikutnya'],['score','Urut: skor'],['name','Urut: nama'],['upd','Urut: terakhir diubah']].map(o=>'<option value="'+o[0]+'"'+(UI.sort===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'+(UI.q?'<span class="tag">Cari: '+esc(UI.q)+'</span>':'')+'<span class="count">'+r.length+' lead</span></div>';
+  const h=lanes+who+subs+tools+bar;
+  if(!r.length)return h+'<div class="card empty"><b>Kosong</b>'+(UI.ltab==='new'&&UI.who==='none'?'Semua lead baru sudah dibagi.':'Tidak ada lead di kelompok ini'+(UI.q?' yang cocok dengan pencarian':'')+'.')+'</div>';
   if(UI.lview==='card'){const max=150;return h+'<div class="lcards">'+r.slice(0,max).map(leadCard).join('')+'</div>'+(r.length>max?'<p class="sub" style="margin-top:12px">Menampilkan '+max+' dari '+r.length+' lead. Pakai filter atau pencarian.</p>':'')}
-  return h+'<div class="card"><div class="tblwrap"><table class="tbl"><thead><tr><th>Bisnis</th>'+(isMe()?'':'<th>PIC</th>')+'<th>Status</th><th>Sequence</th><th>Aksi berikutnya</th><th>Waktu di sana</th><th>Skor</th><th>Email</th></tr></thead><tbody>'
-   +r.map(l=>{const a=na(l);return '<tr data-open="'+l.id+'"><td><div class="biz"><span class="av">'+esc(initials(l.business))+'</span><div><b>'+esc(l.business)+'</b><small><span class="cc '+l.country+'">'+l.country+'</span> '+esc(l.city)+' · '+esc(l.niche)+'</small></div></div></td>'+(isMe()?'':'<td>'+picCell(l)+'</td>')+'<td>'+pill(l.stage)+'</td><td>'+dots(l)+'</td><td class="na">'+(a?'<b>'+esc(a.t)+'</b>'+(a.due?'<span class="due '+dueCls(a.due)+'">'+esc(rel(a.due))+'</span>':a.queue?'<span class="due">Antre kuota harian</span>':''):'<span class="faint">Selesai'+(l.lostReason?' · '+esc(l.lostReason):l.wonValue?' · '+l.wonValue+' USD':'')+'</span>')+'</td><td>'+tzPill(l)+'</td><td class="num">'+(l.score||'–')+'</td><td class="em">'+(l.email?esc(l.email):'<span class="faint">—</span>')+'</td></tr>'}).join('')+'</tbody></table></div></div>'}
+  const sel=canAssign(),allOn=sel&&r.length&&r.every(l=>UI.sel.has(String(l.id)));
+  const fresh=UI.ltab==='new';
+  return h+'<div class="card"><div class="tblwrap"><table class="tbl"><thead><tr>'+(sel?'<th class="selc"><label title="Pilih semua di daftar ini"><input type="checkbox" data-selall="1"'+(allOn?' checked':'')+' aria-label="Pilih semua"></label></th>':'')+'<th>Bisnis</th>'+(isMe()?'':'<th>PIC</th>')+'<th>Status</th>'+(fresh?'':'<th>Sequence</th>')+'<th>Aksi berikutnya</th><th>Waktu di sana</th><th>Skor</th><th>Email</th></tr></thead><tbody>'
+   +r.map(l=>{const a=na(l),id=String(l.id);return '<tr data-open="'+l.id+'"'+(UI.sel.has(id)?' class="picked"':'')+'>'+(sel?'<td class="selc"><label><input type="checkbox" data-sel="'+id+'"'+(UI.sel.has(id)?' checked':'')+' aria-label="Pilih '+esc(l.business)+'"></label></td>':'')+'<td><div class="biz"><span class="av">'+esc(initials(l.business))+'</span><div><b>'+esc(l.business)+'</b><small>'+ccTag(l)+' '+esc(l.city)+' · '+esc(l.niche)+'</small></div></div></td>'+(isMe()?'':'<td>'+picCell(l)+'</td>')+'<td>'+(fresh?(l.stage==='ready'&&l.email?'<span class="pill s-blue">Siap dikirim</span>':pill(l.stage)):pill(l.stage))+'</td>'+(fresh?'':'<td>'+dots(l)+'</td>')+'<td class="na">'+(a?(fresh&&!ownerOf(l)?'<b>Bagikan dulu</b><span class="due">Belum masuk antrean siapa pun</span>':'<b>'+esc(a.t)+'</b>'+(a.due?'<span class="due '+dueCls(a.due)+'">'+esc(rel(a.due))+'</span>':a.queue?'<span class="due">Antre kuota harian</span>':'')):'<span class="faint">Selesai'+(l.lostReason?' · '+esc(l.lostReason):l.wonValue?' · '+l.wonValue+' USD':'')+'</span>')+'</td><td>'+tzPill(l)+'</td><td class="num">'+(l.score||'–')+'</td><td class="em">'+(l.email?esc(l.email):'<span class="faint">—</span>')+'</td></tr>'}).join('')+'</tbody></table></div></div>'}
+/* Bulk hand-out. Server checks the person is an admin. */
+async function assignLeads(ids,owner,quiet){if(!ids.length)return 0;
+  const r=await api('POST','/api/leads/assign',{ids:ids.map(Number),owner,d:stamp()});
+  (r.leads||[]).forEach(x=>replaceLead(normLead(x)));
+  if(!quiet){UI.sel.clear();render();toast((r.changed||0)+' lead '+(owner?'dibagikan ke '+userName(owner):'dijadikan belum dibagi'))}
+  return r.changed||0}
+/* Fair split: sort by score, deal like cards A,B,B,A,A,B… so nobody only gets the weak leads. */
+function splitPlan(list,people){const by={};people.forEach(u=>by[u.username]=[]);list.slice().sort(byScore).forEach((l,i)=>{const n=people.length,round=Math.floor(i/n),k=i%n;by[people[round%2?n-1-k:k].username].push(l.id)});return by}
 function vSchedule(){const items=agendaItems(13);const over=items.filter(x=>x.d==='over').sort((a,b)=>byDue(a,b));const map={};items.filter(x=>x.d!=='over').forEach(x=>{(map[x.d]=map[x.d]||[]).push(x)});
   const chip=x=>'<span class="chip" data-open="'+x.l.id+'"><i class="'+(KIND[x.a.k]||'k-close')+'"></i><span><b>'+esc(x.a.k==='send'?STEP[x.a.step]:KIND_NAME[x.a.k])+'</b> · '+esc(x.l.business)+'</span></span>';
   let h='<div class="legend" style="margin:0 0 12px"><span><i class="k-send"></i>Follow-up / last note</span><span><i class="k-reply"></i>Balas / tanya mock-up</span><span><i class="k-mockup"></i>Deadline mock-up</span><span><i class="k-close"></i>Tutup sequence</span><span><i class="k-wake"></i>Check-in</span></div><div class="agenda">';
@@ -440,7 +479,7 @@ function vSchedule(){const items=agendaItems(13);const over=items.filter(x=>x.d=
 /* pipeline */
 function vPipeline(){const cols=['ready','e1','e2','e3','replied','brief','mockup','paused','won','lost'];const L=scope();
   return '<div class="board">'+cols.map(c=>{const xs=L.filter(l=>c==='ready'?(l.stage==='ready'&&l.email):c==='lost'?(l.stage==='lost'||l.stage==='bounced'):l.stage===c).sort((a,b)=>{const x=na(a),y=na(b),dx=x&&x.due||'9',dy=y&&y.due||'9';return dx<dy?-1:dx>dy?1:byScore(a,b)});const show=xs.slice(0,30);
-    return '<div class="col" data-col="'+c+'"><h4>'+(c==='lost'?'Lost & bounce':ST[c][0])+'<b>'+xs.length+'</b></h4>'+show.map(l=>{const a=na(l);return '<div class="kc" draggable="true" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span>'+esc(l.city)+' · '+l.country+'</span>'+(a&&a.due?'<span class="due '+dueCls(a.due)+'">'+esc(diff(a.due,today())<0?'telat':a.due===today()?'hari ini':fmtDs(a.due))+'</span>':'')+'</small></div>'}).join('')+(xs.length>show.length?'<div class="more">+ '+(xs.length-show.length)+' lagi</div>':'')+(xs.length?'':'<p class="sub" style="padding:4px">Kosong</p>')+'</div>'}).join('')+'</div>'}
+    return '<div class="col" data-col="'+c+'"><h4>'+(c==='lost'?'Lost & bounce':ST[c][0])+'<b>'+xs.length+'</b></h4>'+show.map(l=>{const a=na(l);return '<div class="kc" draggable="true" data-open="'+l.id+'"><b>'+esc(l.business)+'</b><small><span>'+esc(l.city)+(isMe()?'':' · '+(ownerOf(l)?esc(userName(ownerOf(l))):'belum dibagi'))+'</span>'+(a&&a.due?'<span class="due '+dueCls(a.due)+'">'+esc(diff(a.due,today())<0?'telat':a.due===today()?'hari ini':fmtDs(a.due))+'</span>':'')+'</small></div>'}).join('')+(xs.length>show.length?'<div class="more">+ '+(xs.length-show.length)+' lagi</div>':'')+(xs.length?'':'<p class="sub" style="padding:4px">Kosong</p>')+'</div>'}).join('')+'</div>'}
 
 /* Drag a pipeline card to another column. Dates are filled in the same way as the "Catat hasil" buttons. */
 const LATE=['replied','brief','mockup','paused','won','lost','bounced'];
@@ -458,8 +497,8 @@ function moveTo(l,st){if(!l)return;const cur=l.stage==='bounced'?'lost':l.stage;
 /* report */
 function funnel(L){const c=L.filter(l=>l.sent&&l.sent.e1).length,r=L.filter(l=>l.at&&l.at.replied).length,b=L.filter(l=>l.at&&l.at.brief).length,m=L.filter(l=>l.at&&l.at.mockup).length,w=L.filter(l=>l.stage==='won').length;return[['Dihubungi',c],['Membalas',r],['Brief masuk',b],['Mock-up',m],['Won',w]]}
 function vReport(){const L=scope(),t=today();
-  const fun=['AU','US'].filter(c=>UI.country==='ALL'||UI.country===c).map(c=>{const f=funnel(L.filter(l=>l.country===c));const top=Math.max(1,...f.map(x=>x[1]));
-    return '<div class="card pad"><h3 class="h3">'+(c==='AU'?'Australia':'United States')+'</h3><p class="sub">'+L.filter(l=>l.country===c).length+' lead total</p><div class="funnel">'+f.map((x,i)=>'<div class="fr"><span>'+x[0]+'</span><div class="fb"><i style="width:'+(x[1]/top*100)+'%;background:var(--'+(c==='AU'?'au':'us')+');opacity:'+(1-i*.12)+'"></i></div><span class="num"><b>'+x[1]+'</b> <em>'+(i&&f[0][1]?Math.round(x[1]/f[0][1]*100)+'%':'')+'</em></span></div>').join('')+'</div></div>'}).join('');
+  const fun=['US'].map(c=>{const f=funnel(L);const top=Math.max(1,...f.map(x=>x[1]));
+    return '<div class="card pad"><h3 class="h3">'+(c==='AU'?'Australia':'United States')+'</h3><p class="sub">'+L.length+' lead total</p><div class="funnel">'+f.map((x,i)=>'<div class="fr"><span>'+x[0]+'</span><div class="fb"><i style="width:'+(x[1]/top*100)+'%;background:var(--'+(c==='AU'?'au':'us')+');opacity:'+(1-i*.12)+'"></i></div><span class="num"><b>'+x[1]+'</b> <em>'+(i&&f[0][1]?Math.round(x[1]/f[0][1]*100)+'%':'')+'</em></span></div>').join('')+'</div></div>'}).join('');
   const days=[];for(let i=13;i>=0;i--){const d=addD(t,-i);let n=0;for(const l of L){const s=l.sent||{};for(const k in s)if(s[k]===d)n++}days.push([d,n])}
   const mx=Math.max(4,...days.map(x=>x[1])),W=560,H=150,bw=W/14;const ticks=[0,Math.round(mx/2),mx];
   const svg='<svg class="chart" viewBox="0 0 '+(W+30)+' '+(H+28)+'" role="img" aria-label="Email terkirim per hari, 14 hari terakhir">'+ticks.map(v=>{const y=H-v/mx*H+4;return '<line class="gl" x1="28" x2="'+(W+28)+'" y1="'+y+'" y2="'+y+'"/><text x="22" y="'+(y+4)+'" text-anchor="end">'+v+'</text>'}).join('')
@@ -507,7 +546,7 @@ function renderMapping(){const box=$('#mapping');if(!box||!PENDING)return;const 
   const dups=data.filter(r=>dupOf(r,map)).length,blocked=data.filter(r=>!dupOf(r,map)&&isBlocked(rowVal(r,map,'email'),dn)).length,noname=data.filter(r=>!rowVal(r,map,'business')).length;
   const ok=data.length-dups-blocked-noname;
   box.innerHTML='<table class="maptbl"><thead><tr><th>Kolom CSV</th><th>Masuk ke</th><th>Contoh</th></tr></thead><tbody>'+h.map((c,i)=>'<tr><td>'+esc(c)+'</td><td><select data-map="'+i+'" aria-label="Kolom tujuan untuk '+esc(c)+'"><option value="">— abaikan —</option>'+CSV_COLS.map(k=>'<option'+(map[i]===k?' selected':'')+'>'+k+'</option>').join('')+'</select></td><td class="faint">'+esc(String((data[0]||[])[i]||'').slice(0,40))+'</td></tr>').join('')+'</tbody></table>'
-   +'<p style="margin-top:12px;font-size:13px"><b>'+data.length+'</b> baris · '+dups+' duplikat · '+blocked+' di daftar jangan dihubungi'+(noname?' · '+noname+' tanpa nama bisnis':'')+'</p><div class="bar-actions" style="margin-top:10px"><button class="btn l" data-act="do-import"'+(ok?'':' disabled')+'>Import '+ok+' lead</button><button class="btn g" data-act="cancel-import">Batal</button></div>'}
+   +'<p style="margin-top:12px;font-size:13px"><b>'+data.length+'</b> baris · '+dups+' duplikat · '+blocked+' di daftar jangan dihubungi'+(noname?' · '+noname+' tanpa nama bisnis':'')+'</p>'+(isAdmin()?'<div class="fld" style="margin-top:10px;max-width:360px"><label for="imp-owner">Bagikan ke</label><select id="imp-owner"><option value="">Belum dibagi (bagikan nanti di Leads)</option>'+activeUsers().map(u=>'<option value="'+esc(u.username)+'"'+(PENDING.owner===u.username?' selected':'')+'>'+esc(u.name)+'</option>').join('')+(outreachUsers().length>1?'<option value="*split"'+(PENDING.owner==='*split'?' selected':'')+'>Bagi rata ke '+outreachUsers().map(u=>esc(u.name)).join(' & ')+'</option>':'')+'</select></div>':'')+'<div class="bar-actions" style="margin-top:10px"><button class="btn l" data-act="do-import"'+(ok?'':' disabled')+'>Import '+ok+' lead</button><button class="btn g" data-act="cancel-import">Batal</button></div>'}
 async function doImport(){if(!PENDING)return;const data=PENDING.rows.slice(1),map=PENDING.map,dn=dncSet();const out=[];
   data.forEach(r=>{const g=k=>rowVal(r,map,k);if(!g('business')||dupOf(r,map)||isBlocked(g('email'),dn))return;
     const cc=(g('country')||'US').toUpperCase().slice(0,2)==='AU'?'AU':'US';const niche=g('niche');
@@ -516,6 +555,9 @@ async function doImport(){if(!PENDING)return;const data=PENDING.rows.slice(1),ma
     const stIn=g('stage').toLowerCase();l.stage=STAGES.includes(stIn)?stIn:(l.email?'ready':'need');if(g('notes'))l.log.push({d:stamp(),t:'Catatan: '+g('notes'),k:'note'});
     out.push(l)});
   if(!out.length)return toast('Tidak ada lead baru untuk diimpor');
+  const own=isAdmin()&&PENDING.owner||'';
+  if(own==='*split'){const plan=splitPlan(out.map((l,i)=>Object.assign(l,{id:i})),outreachUsers());for(const u in plan)plan[u].forEach(i=>{out[i].owner=u});out.forEach(l=>delete l.id)}
+  else if(own)out.forEach(l=>{l.owner=own});
   const btn=$('[data-act="do-import"]');if(btn){btn.disabled=true;btn.textContent='Mengimpor…'}
   try{const created=[],sk={};for(let i=0;i<out.length;i+=25){const r=await api('POST','/api/leads/import',{leads:out.slice(i,i+25)});(r.created||[]).forEach(l=>{LEADS.push(normLead(l));created.push(l)});for(const k in (r.skipped||{}))sk[k]=(sk[k]||0)+r.skipped[k];if(btn)btn.textContent='Mengimpor… '+Math.min(i+25,out.length)+'/'+out.length}
     PENDING=null;render();toast(created.length+' lead diimpor');
@@ -524,13 +566,13 @@ async function doImport(){if(!PENDING)return;const data=PENDING.rows.slice(1),ma
 function saveFile(name,text){dl(name,text,'text/csv');toast('File diunduh: '+name)}
 function exportCSV(){const L=scope();const head=['id','business','country','city','niche','phone','email','email_confidence','email_source','contact_name','rating','reviews','score','status','next_action','due','sent_1','sent_2','sent_3','replied','brief','mockup','won','won_value','lost_reason','do_not_contact','maps_url','website_check','personal_hook','subject_1','email_1','subject_2','email_2','subject_3','email_3','history'];
   const rows=[head].concat(L.map(l=>{const a=na(l),s=l.sent||{},t=l.at||{},q=l.seq||[];return[l.id,l.business,l.country,l.city,l.niche,l.phone,l.email,l.emailConf,l.emailSource,l.contact,l.rating,l.reviews,l.score,(ST[l.stage]||[l.stage])[0],a?a.t:'',a&&a.due||'',s.e1||'',s.e2||'',s.e3||'',t.replied||'',t.brief||'',t.mockup||'',t.won||'',l.wonValue||'',l.lostReason||'',l.dnc?'yes':'',l.maps,l.websiteCheck,l.hook,(q[0]||{}).subject,(q[0]||{}).body,(q[1]||{}).subject,(q[1]||{}).body,(q[2]||{}).subject,(q[2]||{}).body,(l.log||[]).map(e=>e.d+' '+e.t).join(' | ')]}));
-  saveFile('bilder-leads-'+UI.country.toLowerCase()+'-'+today()+'.csv',toCSV(rows))}
+  saveFile('bilder-leads-'+today()+'.csv',toCSV(rows))}
 
 /* ---------- team helpers ---------- */
-function picCell(l){const o=ownerOf(l);return o?'<span class="who2"><span class="av sm">'+esc(initials(userName(o)))+'</span>'+esc(userName(o))+(l.owner?' <span class="faint" title="Dipindah manual">•</span>':'')+'</span>':'<span class="faint">Belum dibagi</span>'}
-function ownerField(l){if(!activeUsers().length||!isAdmin())return '';const auto=autoOwner(l);
-  return '<div class="fx full" style="margin-bottom:10px"><span>Ditangani oleh</span><p><select id="ed-owner" class="inline-sel"><option value="">Otomatis sesuai negara'+(auto?' ('+esc(userName(auto))+')':'')+'</option>'+activeUsers().map(u=>'<option value="'+esc(u.username)+'"'+(l.owner===u.username?' selected':'')+'>'+esc(u.name)+'</option>').join('')+'</select></p></div>'}
-function perPerson(){const w=weekStart();const rows=activeUsers().map(u=>{const L=LEADS.filter(l=>ownerOf(l)===u.username&&(UI.country==='ALL'||l.country===UI.country));let sent=0;for(const l of L){const s=l.sent||{};for(const k in s)if(s[k]>=w)sent++}
+function picCell(l){const o=ownerOf(l);return o?'<span class="who2"><span class="av sm">'+esc(initials(userName(o)))+'</span>'+esc(userName(o))+'</span>':'<span class="ochip none">Belum dibagi</span>'}
+function ownerField(l){if(!activeUsers().length)return '';if(!isAdmin())return '<div class="fx full" style="margin-bottom:10px"><span>Ditangani oleh</span><p>'+picCell(l)+'</p></div>';
+  return '<div class="fx full" style="margin-bottom:10px"><span>Ditangani oleh</span><p><select id="ed-owner" class="inline-sel"><option value="">Belum dibagi</option>'+activeUsers().map(u=>'<option value="'+esc(u.username)+'"'+(l.owner===u.username?' selected':'')+'>'+esc(u.name)+'</option>').join('')+'</select></p></div>'}
+function perPerson(){const w=weekStart();const rows=activeUsers().map(u=>{const L=LEADS.filter(l=>ownerOf(l)===u.username&&inMarket(l));let sent=0;for(const l of L){const s=l.sent||{};for(const k in s)if(s[k]>=w)sent++}
     return [u,L.length,sent,L.filter(l=>l.at&&l.at.replied).length,L.filter(l=>l.at&&l.at.brief).length,L.filter(l=>l.stage==='won').length]});
   return '<div class="card pad"><h3 class="h3">Per orang</h3><p class="sub">Lead yang ditangani, email minggu ini, dan hasil total.</p><div class="tblwrap" style="max-height:none;margin-top:8px"><table class="tbl" style="min-width:0"><thead><tr><th>PIC</th><th>Lead</th><th>Email minggu ini</th><th>Membalas</th><th>Brief</th><th>Won</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><span class="who2"><span class="av sm">'+esc(initials(r[0].name))+'</span>'+esc(r[0].name)+'</span></td>'+r.slice(1).map(v=>'<td class="num">'+v+'</td>').join('')+'</tr>').join('')+'</tbody></table></div></div>'}
 
@@ -548,10 +590,10 @@ function vPrefs(){const tab=UI.ptab||'team';
   if(tab==='account')return tabs+prefsAccount();
   return tabs+prefsTeam()}
 function prefsTeam(){const act=activeUsers(),off=USERS.filter(u=>u.active===0);
-  let h='<div class="toolbar"><p class="sub" style="max-width:72ch">'+(isAdmin()?'Atur siapa menangani negara mana, tugasnya, dan izin akses akun anggota. Hanya admin yang bisa menambah anggota dan memberi izin.':'Pembagian kerja tim. Hanya admin (Bagus & Andre) yang bisa mengubahnya.')+'</p>'+(isAdmin()?'<button class="btn l" data-act="u-add" style="margin-left:auto">'+ic('user')+'Tambah anggota</button>':'')+'</div>';
-  if(UI.uform==='add'&&isAdmin())h+='<div class="card pad form" style="margin-bottom:14px"><h3 class="h3">Anggota baru</h3><div class="f2"><div class="fld"><label for="nu-name">Nama</label><input id="nu-name" placeholder="Sinta"></div><div class="fld"><label for="nu-username">Username</label><input id="nu-username" placeholder="sinta" autocapitalize="none"></div><div class="fld"><label for="nu-pass">Password awal</label><input id="nu-pass" type="password" autocomplete="new-password" placeholder="Min. 10 karakter"></div></div><div class="fld"><label>Izin akses</label>'+permChecks('data-nperm',DEFAULT_PERMS)+'</div><p class="sub">Akun baru selalu berperan anggota. Negara dan tugasnya diatur di kartunya setelah disimpan. Berikan password awal ke orangnya; ia bisa menggantinya di Akun saya.</p><div class="bar-actions"><button class="btn p" data-act="u-add-save">Simpan anggota</button><button class="btn g" data-act="u-cancel">Batal</button></div></div>';
+  let h='<div class="toolbar"><p class="sub" style="max-width:72ch">'+(isAdmin()?'Atur tugas, batas kirim, dan izin akses tiap orang. Lead dibagikan di halaman Leads (centang lalu Bagikan ke…). Hanya admin yang bisa menambah anggota dan memberi izin.':'Pembagian kerja tim. Hanya admin (Bagus & Andre) yang bisa mengubahnya.')+'</p>'+(isAdmin()?'<button class="btn l" data-act="u-add" style="margin-left:auto">'+ic('user')+'Tambah anggota</button>':'')+'</div>';
+  if(UI.uform==='add'&&isAdmin())h+='<div class="card pad form" style="margin-bottom:14px"><h3 class="h3">Anggota baru</h3><div class="f2"><div class="fld"><label for="nu-name">Nama</label><input id="nu-name" placeholder="Sinta"></div><div class="fld"><label for="nu-username">Username</label><input id="nu-username" placeholder="sinta" autocapitalize="none"></div><div class="fld"><label for="nu-pass">Password awal</label><input id="nu-pass" type="password" autocomplete="new-password" placeholder="Min. 10 karakter"></div></div><div class="fld"><label>Izin akses</label>'+permChecks('data-nperm',DEFAULT_PERMS)+'</div><p class="sub">Akun baru selalu berperan anggota. Tugasnya diatur di kartunya setelah disimpan, lalu bagikan lead ke dia di halaman Leads. Berikan password awal ke orangnya; ia bisa menggantinya di Akun saya.</p><div class="bar-actions"><button class="btn p" data-act="u-add-save">Simpan anggota</button><button class="btn g" data-act="u-cancel">Batal</button></div></div>';
   h+='<div class="ucards">'+act.map(userCard).join('')+'</div>';
-  if(off.length)h+='<div class="card pad" style="margin-top:14px"><h3 class="h3">Nonaktif</h3><p class="sub">Tidak bisa login. Lead mereka kembali ke pembagian otomatis.</p><div class="rows" style="margin-top:10px">'+off.map(u=>'<div class="row"><div class="who"><b>'+esc(u.name)+'</b><small>@'+esc(u.username)+'</small></div><div class="acts">'+(isAdmin()?'<button class="btn s" data-act="u-active" data-uid="'+u.id+'" data-v="1">Aktifkan lagi</button>':'')+'</div></div>').join('')+'</div></div>';
+  if(off.length)h+='<div class="card pad" style="margin-top:14px"><h3 class="h3">Nonaktif</h3><p class="sub">Tidak bisa login. Lead mereka jadi belum dibagi sampai dibagikan ulang.</p><div class="rows" style="margin-top:10px">'+off.map(u=>'<div class="row"><div class="who"><b>'+esc(u.name)+'</b><small>@'+esc(u.username)+'</small></div><div class="acts">'+(isAdmin()?'<button class="btn s" data-act="u-active" data-uid="'+u.id+'" data-v="1">Aktifkan lagi</button>':'')+'</div></div>').join('')+'</div></div>';
   return h}
 function userCard(u){const t=teamOf(u.username),me=ME&&ME.id===u.id,adm=u.role==='admin',dis=isAdmin()?'':' disabled';const n=LEADS.filter(l=>ownerOf(l)===u.username).length;
   const perms=u.perms||DEFAULT_PERMS;const granted=PERMS.filter(k=>perms[k[0]]).map(k=>k[1]);
@@ -561,15 +603,17 @@ function userCard(u){const t=teamOf(u.username),me=ME&&ME.id===u.id,adm=u.role==
   if(UI.uform==='edit:'+u.id)h+='<div class="outform"><label class="sub" for="eu-name">Nama</label><input id="eu-name" value="'+esc(u.name)+'"><button class="btn s p" data-act="u-edit-save" data-uid="'+u.id+'">Simpan</button><button class="btn s g" data-act="u-cancel">Batal</button></div>';
   if(UI.uform==='pw:'+u.id)h+='<div class="outform"><label class="sub" for="pu-pass">Password baru</label><input id="pu-pass" type="password" autocomplete="new-password" placeholder="Min. 10 karakter"><button class="btn s p" data-act="u-pw-save" data-uid="'+u.id+'">Simpan</button><button class="btn s g" data-act="u-cancel">Batal</button><small class="sub">Semua sesi '+esc(u.name)+' akan keluar.</small></div>';
   if(UI.uform==='perm:'+u.id)h+='<div class="outform" style="display:grid"><b class="h3">Izin akses '+esc(u.name)+'</b>'+permChecks('data-eperm',perms)+'<div class="bar-actions"><button class="btn s p" data-act="u-perm-save" data-uid="'+u.id+'">Simpan izin</button><button class="btn s g" data-act="u-cancel">Batal</button></div></div>';
-  h+='<div class="ucard-b"><div class="fld"><label>Negara yang ditangani</label><div class="terr-c">'+countryList().map(c=>'<label><input type="checkbox" data-team-country="'+esc(u.username)+'" value="'+c+'"'+(t.countries.includes(c)?' checked':'')+dis+'> '+(COUNTRY_NAME[c]||c)+'</label>').join('')+'</div></div>'
+  const mineL=LEADS.filter(l=>ownerOf(l)===u.username&&inMarket(l));
+  h+='<div class="ucard-b"><div class="fld"><label>Lead yang dibagikan</label><div class="ustat"><span><b class="num">'+mineL.filter(untouched).length+'</b> belum diproses</span><span><b class="num">'+mineL.filter(l=>['e1','e2','e3'].includes(l.stage)).length+'</b> dalam sequence</span><span><b class="num">'+mineL.filter(l=>['replied','brief','mockup'].includes(l.stage)).length+'</b> respons</span><button class="btn s" data-view="leads" data-ltab="all" data-who="'+esc(u.username)+'">Lihat</button></div></div>'
    +'<div class="fld"><label>Tugas</label><div class="tasks">'+TASKS.map(k=>'<label class="task"><input type="checkbox" data-team-task="'+esc(u.username)+'" value="'+k[0]+'"'+(t.tasks[k[0]]?' checked':'')+dis+'><span><b>'+k[1]+'</b><small>'+k[2]+'</small></span></label>').join('')+'</div></div>'
    +'<div class="f2">'+(t.tasks.mockup?'<div class="fld"><label for="tm-'+esc(u.username)+'">Mock-up yang dikerjakan</label><select id="tm-'+esc(u.username)+'" data-team-field="'+esc(u.username)+'" data-k="mockupScope"'+dis+'><option value="own"'+(t.mockupScope==='own'?' selected':'')+'>Lead miliknya saja</option><option value="all"'+(t.mockupScope==='all'?' selected':'')+'>Semua lead tim</option></select></div>':'')
    +'<div class="fld"><label for="tl-'+esc(u.username)+'">Batas kirim per hari</label><input id="tl-'+esc(u.username)+'" type="number" min="1" data-team-field="'+esc(u.username)+'" data-k="limit" value="'+(t.limit||'')+'" placeholder="'+S.limit+' (default)"'+dis+'></div>'
    +'<div class="fld"><label for="tf-'+esc(u.username)+'">Kirim dari</label><input id="tf-'+esc(u.username)+'" type="email" data-team-field="'+esc(u.username)+'" data-k="from" value="'+esc(t.from)+'"'+dis+'></div>'
    +'<div class="fld"><label for="ts-'+esc(u.username)+'">Signature</label><select id="ts-'+esc(u.username)+'" data-team-field="'+esc(u.username)+'" data-k="sig"'+dis+'><option value="zoho"'+(t.sig==='zoho'?' selected':'')+'>HTML dari Zoho</option><option value="text"'+(t.sig==='text'?' selected':'')+'>Teks dari dashboard</option></select></div></div></div></article>';
   return h}
-function prefsBusiness(){const dis=canDo('templates')?'':' disabled';return (dis?'<div class="note info" style="margin-bottom:12px">Hanya bisa dilihat. Minta admin memberi izin "Ubah template & pengaturan" kalau perlu mengubahnya.</div>':'')+'<div class="two"><div class="card pad form"><h3 class="h3">Alamat pos bisnis</h3><div class="fld"><label for="set-postal">Alamat lengkap</label><input id="set-postal" data-set="postal" value="'+esc(S.postal)+'" placeholder="Jl. Bougenville No. 21B, Malang 65141, Indonesia"'+dis+'><small>Dipakai di signature teks dari dashboard. Kalau memakai signature HTML Zoho, pastikan alamat yang sama ada di sana.</small></div></div>'
-  +'<div class="card pad form"><h3 class="h3">Jangan dihubungi</h3><div class="fld"><label for="set-dnc">Email atau domain, satu per baris</label><textarea id="set-dnc" data-set="dnc" placeholder="owner@contoh.com&#10;contoh.com.au"'+dis+'>'+esc(S.dnc)+'</textarea><small>Lead yang menjawab "tidak tertarik" otomatis masuk daftar ini. Import CSV melewati alamat di sini.</small></div></div></div>'}
+function prefsBusiness(){const dis=canDo('templates')?'':' disabled';const oldAU=LEADS.filter(l=>l.country!=='US'&&untouched(l)).length;return (dis?'<div class="note info" style="margin-bottom:12px">Hanya bisa dilihat. Minta admin memberi izin "Ubah template & pengaturan" kalau perlu mengubahnya.</div>':'')+'<div class="two"><div class="card pad form"><h3 class="h3">Alamat pos bisnis</h3><div class="fld"><label for="set-postal">Alamat lengkap</label><input id="set-postal" data-set="postal" value="'+esc(S.postal)+'" placeholder="Jl. Bougenville No. 21B, Malang 65141, Indonesia"'+dis+'><small>Dipakai di signature teks dari dashboard. Kalau memakai signature HTML Zoho, pastikan alamat yang sama ada di sana.</small></div></div>'
+  +'<div class="card pad form"><h3 class="h3">Jangan dihubungi</h3><div class="fld"><label for="set-dnc">Email atau domain, satu per baris</label><textarea id="set-dnc" data-set="dnc" placeholder="owner@contoh.com&#10;contoh.com.au"'+dis+'>'+esc(S.dnc)+'</textarea><small>Lead yang menjawab "tidak tertarik" otomatis masuk daftar ini. Import CSV melewati alamat di sini.</small></div></div></div>'
+  +'<div class="card pad form" style="margin-top:14px"><h3 class="h3">Pasar</h3><p class="sub">Fokus sekarang US. Lead non-US yang sudah berjalan tetap tampil sampai selesai supaya follow-up tidak terlewat.</p><label class="task" style="margin-top:8px"><input type="checkbox" id="set-showAU"'+(S.showOldAU?' checked':'')+dis+'><span><b>Tampilkan lead Australia yang belum dihubungi</b><small>'+oldAU+' lead lama, disembunyikan dari semua halaman.</small></span></label></div>'}
 function prefsAccount(){if(!ME)return '';return '<div class="two"><div class="card pad form"><h3 class="h3">Profil</h3><div class="fld"><label for="me-name">Nama tampilan</label><input id="me-name" value="'+esc(ME.name)+'"><small>Muncul di riwayat lead dan di email mode teks.</small></div><div class="bar-actions"><button class="btn p" data-act="me-name-save">Simpan nama</button></div>'
   +'<div class="fld"><label>Tema</label><div class="bar-actions"><button class="btn s" data-act="theme">'+ic(curTheme()==='dark'?'sun':'moon')+(curTheme()==='dark'?'Pakai tema terang':'Pakai tema gelap')+'</button></div></div></div>'
   +'<div class="card pad form"><h3 class="h3">Ganti password</h3><div class="fld"><label for="me-cur">Password sekarang</label><input id="me-cur" type="password" autocomplete="current-password"></div><div class="fld"><label for="me-new">Password baru</label><input id="me-new" type="password" autocomplete="new-password" placeholder="Min. 10 karakter"></div><div class="fld"><label for="me-new2">Ulangi password baru</label><input id="me-new2" type="password" autocomplete="new-password"></div><div class="bar-actions"><button class="btn p" data-act="me-pw-save">Ganti password</button></div><small class="sub">Perangkat lain yang sedang login akan keluar.</small></div></div>'}
@@ -597,7 +641,7 @@ function primaryBtn(l,a){if(!a)return '';
 function renderDrawer(){const dr=$('#drawer'),sc=$('#scrim');const l=UI.open!=null?byId(UI.open):null;
   if(!l){dr.hidden=true;sc.hidden=true;if(!UI.queue)document.body.classList.remove('lock');return}
   dr.hidden=false;sc.hidden=false;document.body.classList.add('lock');const a=na(l);const opts=OUT_BY[l.stage]||[];
-  let h='<div class="dh"><div class="dh-top"><div style="min-width:0"><h2>'+esc(l.business)+'</h2><div class="meta"><span class="cc '+l.country+'">'+l.country+'</span>'+esc(l.city)+' · '+esc(l.niche)+(l.rating?' · '+l.rating+'★ ('+(l.reviews||0)+')':'')+(l.score?' · skor '+l.score+'/10':'')+' · '+tzPill(l)+'</div></div><button class="x" data-act="close" aria-label="Tutup">×</button></div>'
+  let h='<div class="dh"><div class="dh-top"><div style="min-width:0"><h2>'+esc(l.business)+'</h2><div class="meta">'+ccTag(l)+''+esc(l.city)+' · '+esc(l.niche)+(l.rating?' · '+l.rating+'★ ('+(l.reviews||0)+')':'')+(l.score?' · skor '+l.score+'/10':'')+' · '+tzPill(l)+'</div></div><button class="x" data-act="close" aria-label="Tutup">×</button></div>'
    +'<div class="nextbox '+(a&&a.due?dueCls(a.due):'')+'"><div><span class="lbl">'+pill(l.stage)+'</span><b>'+(a?esc(a.t):'Selesai'+(l.lostReason?' · '+esc(l.lostReason):l.wonValue?' · '+l.wonValue+' USD':''))+'</b>'+(a&&a.due?' <span class="due '+dueCls(a.due)+'">· '+esc(rel(a.due))+'</span>':'')+'</div>'+primaryBtn(l,a)+'</div>'
    +journey(l)
    +(opts.length?'<div class="outs"><span>Catat hasil:</span>'+opts.map(k=>OUT[k].input?'<button class="btn s'+(UI.out===k?' p':'')+'" data-out="'+k+'">'+OUT[k].l+'…</button>':'<button class="btn s" data-act="out" data-o="'+k+'" data-id="'+l.id+'">'+OUT[k].l+'</button>').join('')+'</div>':'')+outForm(l)
@@ -660,10 +704,11 @@ function mount(){const app=$('#app');app.innerHTML=SHELL;
   app.addEventListener('drop',e=>{const col=e.target.closest&&e.target.closest('.col[data-col]');if(col){e.preventDefault();col.classList.remove('over');moveTo(byId(e.dataTransfer.getData('text/plain')),col.dataset.col);return}const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.remove('over');const f=e.dataTransfer.files[0];if(f)readFile(f)}})}
 function onClick(e){const t=e.target.closest('button,[data-open],[data-view],[data-ltab],a,label');if(!t)return;const ds_=t.dataset;
   if(ds_.copyi){const v=CP.get(+ds_.copyi);if(v!=null)copyText(v,t);return}
-  if(ds_.view&&!ds_.open){UI.navOpen=false;UI.view=ds_.view;if(ds_.ltab)UI.ltab=ds_.ltab;UI.queue=null;UI.open=null;render();window.scrollTo(0,0);return}
-  if(ds_.ltab&&!ds_.open){UI.ltab=ds_.ltab;render();return}
+  if(ds_.view&&!ds_.open){UI.navOpen=false;UI.view=ds_.view;if(ds_.ltab){UI.ltab=ds_.ltab;UI.sub=ds_.sub||'all';UI.sel.clear()}if(ds_.who)UI.who=ds_.who;UI.queue=null;UI.open=null;render();window.scrollTo(0,0);return}
+  if(ds_.ltab&&!ds_.open){UI.ltab=ds_.ltab;UI.sub=ds_.sub||'all';UI.sel.clear();if(ds_.who)UI.who=ds_.who;render();return}
+  if(ds_.who!=null&&!ds_.open&&!ds_.act){UI.who=ds_.who;UI.sel.clear();render();return}
+  if(ds_.sub&&!ds_.open){UI.sub=ds_.sub;UI.sel.clear();render();return}
   if(ds_.ptab){UI.ptab=ds_.ptab;UI.uform=null;render();return}
-  if(ds_.country){UI.country=ds_.country;render();return}
   if(ds_.mode){UI.me=ds_.mode==='me';UI.queue=null;render();toast(isMe()?'Mode saya: hanya lead yang kamu tangani':'Tampilan tim: semua lead');return}
   if(ds_.dtab&&!ds_.open&&t.closest('#drawer')){UI.dtab=ds_.dtab;renderDrawer();return}
   if(ds_.out&&!ds_.act){if(ds_.open){openLead(ds_.open,'sum',ds_.out);return}UI.out=UI.out===ds_.out?null:ds_.out;renderDrawer();return}
@@ -678,7 +723,7 @@ function onClick(e){const t=e.target.closest('button,[data-open],[data-view],[da
     case 'u-cancel':UI.uform=null;render();break;
     case 'u-edit':UI.uform='edit:'+ds_.uid;render();break;
     case 'u-pw':UI.uform='pw:'+ds_.uid;render();break;
-    case 'u-add-save':{const perms={};$$('input[data-nperm]').forEach(x=>perms[x.value]=x.checked);userAction(()=>api('POST','/api/users',{name:$('#nu-name').value,username:$('#nu-username').value,password:$('#nu-pass').value,perms}),'Anggota ditambahkan. Atur negara dan tugasnya di kartu barunya.');break}
+    case 'u-add-save':{const perms={};$$('input[data-nperm]').forEach(x=>perms[x.value]=x.checked);userAction(()=>api('POST','/api/users',{name:$('#nu-name').value,username:$('#nu-username').value,password:$('#nu-pass').value,perms}),'Anggota ditambahkan. Atur tugasnya, lalu bagikan lead di halaman Leads.');break}
     case 'u-perm':UI.uform=UI.uform==='perm:'+ds_.uid?null:'perm:'+ds_.uid;render();break;
     case 'u-perm-save':{const perms={};$$('input[data-eperm]').forEach(x=>perms[x.value]=x.checked);userAction(()=>api('PUT','/api/users/'+ds_.uid,{perms}),'Izin akses disimpan');break}
     case 'u-edit-save':userAction(()=>api('PUT','/api/users/'+ds_.uid,{name:$('#eu-name').value}),'Nama disimpan');break;
@@ -690,6 +735,11 @@ function onClick(e){const t=e.target.closest('button,[data-open],[data-view],[da
     case 'theme':toggleTheme();if(UI.view==='prefs')render();break;
     case 'menu':UI.navOpen=!UI.navOpen;$('#side').classList.toggle('open',UI.navOpen);break;
     case 'logout':logout();break;
+    case 'assign':assignLeads([...UI.sel],ds_.owner||'').catch(e=>toast(e.message));break;
+    case 'sel-clear':UI.sel.clear();render();break;
+    case 'split':{const list=leadsFiltered().filter(x=>!ownerOf(x)&&untouched(x)),people=outreachUsers();if(!list.length||people.length<2)break;
+      const plan=splitPlan(list,people);if(!confirm('Bagi '+list.length+' lead:\n'+people.map(u=>'• '+u.name+': '+plan[u.username].length+' lead').join('\n')+'\n\nLanjut?'))break;
+      t.disabled=true;(async()=>{let n=0;for(const u of people)n+=await assignLeads(plan[u.username],u.username,true);UI.sel.clear();render();toast(n+' lead dibagi rata ke '+people.map(u=>u.name).join(' & '))})().catch(e=>{toast(e.message);render()});break}
     case 'lview':UI.lview=ds_.v==='card'?'card':'list';render();break;
     case 'reload':location.reload();break;
     case 'out':if(l)applyOut(l,ds_.o);break;
@@ -726,7 +776,11 @@ function onChange(e){const t=e.target;
   if(t.dataset.teamTask!=null){const u=t.dataset.teamTask;setTeam(u,x=>{x.tasks=Object.assign({},teamOf(u).tasks,{[t.value]:t.checked})});toast('Tugas '+userName(u)+' disimpan');return}
   if(t.dataset.teamField!=null){const u=t.dataset.teamField,k=t.dataset.k;let v=t.value;if(k==='limit')v=v?Math.max(1,Math.round(+v)||1):0;if(k==='from')v=v.trim();setTeam(u,x=>{x[k]=v});toast('Disimpan');return}
   if(t.dataset.terr!=null){const terr={};$$('input[data-terr]').forEach(x=>{if(x.checked)(terr[x.dataset.terr]=terr[x.dataset.terr]||[]).push(x.value)});S.territory=terr;saveSettings();render();toast('Pembagian lead disimpan');return}
-  if(t.id==='ed-owner'){const l=byId(UI.open);if(l){const v=t.value;const u=change(l,x=>{if(v)x.owner=v;else delete x.owner},v?'Ditangani oleh '+userName(v):'Penanganan kembali otomatis sesuai negara','note');render();toast('Disimpan',u)}return}
+  if(t.id==='ed-owner'){const l=byId(UI.open);if(l){const v=t.value;const u=change(l,x=>{if(v)x.owner=v;else delete x.owner},v?'Dibagikan ke '+userName(v):'Dikembalikan ke belum dibagi','note');render();toast(v?'Dibagikan ke '+userName(v):'Jadi belum dibagi',u)}return}
+  if(t.dataset.sel!=null){t.checked?UI.sel.add(t.dataset.sel):UI.sel.delete(t.dataset.sel);render();return}
+  if(t.dataset.selall!=null){const ids=leadsFiltered().map(l=>String(l.id));if(t.checked)ids.forEach(i=>UI.sel.add(i));else ids.forEach(i=>UI.sel.delete(i));render();return}
+  if(t.id==='imp-owner'&&PENDING){PENDING.owner=t.value;return}
+  if(t.id==='set-showAU'){S.showOldAU=t.checked;saveSettings();render();toast(t.checked?'Lead Australia lama ditampilkan':'Lead Australia lama disembunyikan');return}
   if(t.id==='f-sort'){UI.sort=t.value;render();return}
   if(t.id==='tpl-sel'){UI.tplSel=t.value;render();return}
   if(t.dataset.set&&t.type==='number'){const v=Math.max(1,Math.round(+t.value||1));S[t.dataset.set]=v;saveSettings();toast('Aturan disimpan');return}
@@ -744,7 +798,7 @@ function onKey(e){if(e.key==='/'&&!/input|textarea|select/i.test(e.target.tagNam
 
 /* ---------- boot ---------- */
 async function start(){restoreUI();mount();$('#view').innerHTML='<div class="loading">'+ic('loader')+'Memuat data…</div>';$('#theme-btn').innerHTML=ic(curTheme()==='dark'?'sun':'moon');renderSave();
-  try{const d=await api('GET','/api/bootstrap');ME=d.user;USERS=d.users||[];CURSOR=d.cursor||'';setData(d);if(cleanTemplates()&&canDo('templates'))saveSettings();if(migrateTeam()&&isAdmin())saveSettings();if(typeof UI.me!=='boolean')UI.me=myTerritory().length>0;render()}
+  try{const d=await api('GET','/api/bootstrap');ME=d.user;USERS=d.users||[];CURSOR=d.cursor||'';setData(d);if(cleanTemplates()&&canDo('templates'))saveSettings();if(migrateTeam()&&isAdmin())saveSettings();if(typeof UI.me!=='boolean')UI.me=LEADS.some(mine);render()}
   catch(e){$('#view').innerHTML='<div class="card empty"><b>Tidak bisa memuat data</b>'+esc(e.message)+'<div class="bar-actions" style="justify-content:center;margin-top:12px"><button class="btn" data-act="reload">Coba lagi</button></div></div>';return}
   setInterval(poll,20000);
   setInterval(()=>{if(UI.view==='today'&&UI.open==null&&!UI.queue&&!isTyping())render()},60000)}

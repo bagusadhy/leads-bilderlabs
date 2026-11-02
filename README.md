@@ -15,7 +15,7 @@ Untuk dua pengguna, pemakaian jauh di bawah batas paket gratis Workers dan D1.
 | --- | --- |
 | Hari ini | Checklist berurutan: cek inbox → balas → follow-up → Email 1 baru → mock-up → tutup sequence → hubungi lagi. Ada jam kirim per zona waktu (dalam WIB). |
 | Mode kirim | Email muncul satu per satu: salin alamat, subjek, isi, lalu "Terkirim, lanjut". Tanggal follow-up langsung terjadwal. |
-| Leads | Tab per status dengan tampilan List atau Kartu. |
+| Leads | Empat jalur terpisah: **Belum diproses** (belum pernah dikirimi email), **Dalam sequence**, **Respons**, **Selesai**. Filter PIC (Belum dibagi / Bagus / Andre). Admin mencentang lead lalu **Bagikan ke…**, atau **Bagi rata**. |
 | Jadwal | Semua yang jatuh tempo 14 hari ke depan, yang terlambat di paling atas. |
 | Pipeline | Posisi setiap lead di alur outreach. |
 | Laporan | Funnel per negara, email terkirim per hari, balasan per niche, alasan lost, nilai won. |
@@ -122,10 +122,11 @@ Kalau nanti ada file migrasi baru, jalankan `npm run db:migrate` dari laptop seb
 
 Menu **Pengaturan** di dashboard:
 
-- **Tim:** setiap anggota punya kartu sendiri berisi negara yang ditangani, tugas (kirim outreach, balas lead, buat mock-up, riset email), batas kirim per hari, alamat pengirim, dan pilihan signature (HTML Zoho atau teks). **Mode saya** hanya menampilkan lead dan langkah harian sesuai kartu ini.
+- **Tim:** setiap anggota punya kartu sendiri berisi tugas (kirim outreach, balas lead, buat mock-up, riset email), batas kirim per hari, alamat pengirim, pilihan signature (HTML Zoho atau teks), dan jumlah lead yang dibagikan ke dia. **Mode saya** hanya menampilkan lead yang dibagikan ke kamu.
+- **Pembagian lead:** tidak lagi berdasarkan negara. Lead baru masuk sebagai **Belum dibagi** dan belum masuk antrean siapa pun. Admin membagikannya di Leads → Belum diproses (centang → Bagikan ke Bagus/Andre, atau **Bagi rata**: diurutkan per skor lalu diselang-seling supaya adil), saat import CSV (pilihan "Bagikan ke"), atau satu per satu di detail lead.
 - **Admin (Bagus & Andre)** satu-satunya yang bisa menambah anggota, memberi izin akses, mengubah nama, reset password, dan menonaktifkan anggota (tidak dihapus, riwayatnya tetap ada). Akun baru selalu berperan **anggota**; peran admin tidak bisa diberikan dari dashboard.
 - **Izin akses anggota** (dicentang admin): lihat lead seluruh tim, ubah template & pengaturan, import & export data, lihat laporan. Tanpa izin "lihat lead seluruh tim", server hanya mengirim lead yang ia tangani, jadi data orang lain tidak pernah sampai ke browsernya.
-- **Bisnis:** alamat pos dan daftar jangan dihubungi.
+- **Bisnis:** alamat pos, daftar jangan dihubungi, dan pilihan menampilkan lead Australia lama. Fokus sekarang US; lead Australia yang belum dihubungi disembunyikan, yang sudah berjalan tetap tampil sampai selesai.
 - **Akun saya:** ganti nama tampilan, password, dan tema.
 
 Admin dibuat lewat `npm run user:add` (otomatis admin). Anggota berikutnya ditambahkan admin dari dashboard.
@@ -142,7 +143,7 @@ npx wrangler tail                       # lihat log server secara langsung
 
 Menu **Import / export → Cadangan JSON** juga mengunduh semua data dari browser. D1 juga menyimpan riwayat perubahan beberapa hari ke belakang (fitur Time Travel), jadi database bisa dikembalikan ke waktu tertentu kalau ada kesalahan.
 
-Kalau ada file baru di `migrations/`, **jalankan `npm run db:migrate` dulu**, baru deploy/push. Kode baru bisa membutuhkan kolom yang dibuat migrasi itu.
+Kalau ada file baru di `migrations/`, **jalankan `npm run db:migrate` dulu**, baru deploy/push. (Migrasi `0005` memberi PIC ke lead yang sudah berjalan: US → Andre, Australia → Bagus. Lead yang belum dihubungi menjadi Belum dibagi.) Kode baru bisa membutuhkan kolom yang dibuat migrasi itu.
 
 ## Menambah lead baru
 

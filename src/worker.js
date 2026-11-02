@@ -69,18 +69,17 @@ function requirePerm(c, perm, label) {
   if (!can(c.get('user'), perm)) throw new HttpError(403, `Akunmu belum diberi izin untuk ${label}. Minta admin mengaturnya.`);
 }
 
-/** Which leads this person may see. Members without "team_view" only see leads they handle. */
+/** Which leads this person may see. Members without "team_view" only see leads handed to them. */
 async function visibility(db, user) {
   if (can(user, 'team_view')) return () => true;
   const [settings, users] = await Promise.all([getSettings(db), db.prepare('SELECT username FROM users WHERE active = 1 ORDER BY id').all()]);
   const team = settings.team || {};
   const active = users.results.map((u) => u.username);
-  const countriesOf = (u) => (team[u] && Array.isArray(team[u].countries) ? team[u].countries : []);
-  const autoOwner = (country) => active.find((u) => countriesOf(u).includes(country)) || '';
   const mine = team[user.username] || {};
   const mockupAll = (mine.tasks?.mockup !== false) && mine.mockupScope === 'all';
   return (lead) => {
-    const owner = lead.owner && active.includes(lead.owner) ? lead.owner : autoOwner(lead.country);
+    // Leads are handed out by an admin ("Bagikan ke"). No owner = not handed out yet.
+    const owner = lead.owner && active.includes(lead.owner) ? lead.owner : '';
     return owner === user.username || (mockupAll && (lead.stage === 'brief' || lead.stage === 'mockup'));
   };
 }
@@ -364,6 +363,12 @@ app.post('/api/leads/import', async (c) => {
       const input = { ...raw };
       if (!STAGES.includes(input.stage)) input.stage = input.email ? 'ready' : 'need';
       lead = cleanLead(input);
+      if (user.role !== 'admin' && user.role !== 'api') {
+        // Only admins decide who handles a lead.
+        const data = JSON.parse(lead.data);
+        delete data.owner;
+        lead.data = JSON.stringify(data);
+      }
     } catch {
       skipped.invalid++;
       continue;
@@ -401,6 +406,44 @@ app.post('/api/leads/import', async (c) => {
     created = leadStatementIndex.map((i) => results[i].results[0].id);
   }
   return c.json({ created: await loadLeads(db, created), skipped });
+});
+
+/** Hand leads to a teammate in bulk ("Bagikan ke"). owner '' puts them back to "belum dibagi". Admins only. */
+app.post('/api/leads/assign', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user');
+  if (user.role !== 'admin') throw new HttpError(403, 'Hanya admin yang bisa membagikan lead');
+  const body = await readJson(c);
+  const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) throw new HttpError(400, 'Pilih lead dulu');
+  if (ids.length > 1000) throw new HttpError(413, 'Maksimal 1000 lead sekali bagi');
+  const owner = String(body.owner || '').trim();
+  let name = '';
+  if (owner) {
+    const u = await db.prepare('SELECT name FROM users WHERE username = ? AND active = 1').bind(owner).first();
+    if (!u) throw new HttpError(400, 'Anggota tidak ditemukan atau sudah nonaktif');
+    name = u.name;
+  }
+  const [ev] = cleanEvents([{ k: 'note', t: owner ? `Dibagikan ke ${name}` : 'Dikembalikan ke belum dibagi', d: body.d }]);
+
+  // Only touch leads whose owner actually changes, so versions and history stay meaningful.
+  const changed = [];
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const rows = await db.prepare(`SELECT id, COALESCE(json_extract(data, '$.owner'), '') AS owner FROM leads WHERE id IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all();
+    rows.results.forEach((r) => { if (r.owner !== owner) changed.push(r.id); });
+  }
+  const statements = [];
+  for (let i = 0; i < changed.length; i += 90) {
+    const chunk = changed.slice(i, i + 90);
+    const ph = chunk.map(() => '?').join(',');
+    statements.push(owner
+      ? db.prepare(`UPDATE leads SET data = json_set(data, '$.owner', ?), version = version + 1, updated_by = ?, updated_at = ${NOW} WHERE id IN (${ph})`).bind(owner, user.id, ...chunk)
+      : db.prepare(`UPDATE leads SET data = json_remove(data, '$.owner'), version = version + 1, updated_by = ?, updated_at = ${NOW} WHERE id IN (${ph})`).bind(user.id, ...chunk));
+    statements.push(db.prepare(`INSERT INTO lead_events (lead_id, user_id, kind, text, local_time) SELECT id, ?, ?, ?, ? FROM leads WHERE id IN (${ph})`).bind(user.id, ev.k, ev.t, ev.d, ...chunk));
+  }
+  if (statements.length) await db.batch(statements);
+  return c.json({ changed: changed.length, leads: changed.length ? await loadLeads(db, changed) : [] });
 });
 
 app.put('/api/settings', async (c) => {
